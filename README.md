@@ -7,7 +7,7 @@
 - Records microphone input into `.wav` files under `~/Library/Application Support/RST/Recordings`
 - Runs embedded `whisper.cpp` against those recordings while recording and again on the final file
 - Saves transcript files next to the audio as `*-transcript.txt`
-- Lets you choose a Whisper model preset and auto-download it into `~/Library/Application Support/RST/Models`
+- Lets you configure separate Whisper models for realtime and final-pass transcription, then auto-download presets into `~/Library/Application Support/RST/Models`
 - Exports the selected audio file or transcript to a user-chosen destination
 - Lets you reveal the saved audio and transcript in Finder
 
@@ -47,7 +47,8 @@ xattr -cr /Application/RST.app
 ```
 
 6. In the sidebar, set:
-   - a Whisper preset to auto-download, or a full path to your own `.bin` model
+   - a realtime Whisper model (typically smaller/faster) for live transcript updates while recording
+   - a batch Whisper model (typically larger/more accurate) for final transcript generation
    - the transcription language, or `auto`
 7. Start recording. The transcript view updates periodically while audio is still being captured.
 8. Stop recording for a final pass, or export the selected `.wav` / `.txt` files from the sidebar.

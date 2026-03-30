@@ -86,10 +86,11 @@ final class RecorderViewModel: ObservableObject {
         }
     }
 
-    func stopRecording() {
+    func stopRecording(finalConfiguration: WhisperConfiguration) async {
         do {
             liveUpdateTimer?.invalidate()
             liveUpdateTimer = nil
+            liveUpdateTask?.cancel()
             let url = try recorder.stopRecording()
             activeRecordingURL = url
             isRecording = false
@@ -98,10 +99,9 @@ final class RecorderViewModel: ObservableObject {
             if let item = selectedRecording {
                 try loadTranscript(for: item)
             }
-            statusMessage = "Saved recording \(url.lastPathComponent)"
-            Task {
-                await refreshLiveTranscript(finalPass: true)
-            }
+            liveSession = nil
+            statusMessage = "Saved recording \(url.lastPathComponent). Starting final transcription..."
+            await transcribe(audioURL: url, configuration: finalConfiguration)
         } catch {
             statusMessage = error.localizedDescription
         }

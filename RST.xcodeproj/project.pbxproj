@@ -19,6 +19,7 @@
 		A1000000000000000000000D /* whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* whisper.xcframework */; };
 		A1000000000000000000000E /* whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A1000000000000000000000F /* WhisperModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* WhisperModelStore.swift */; };
+		A10000000000000000000027 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -52,6 +53,7 @@
 		A10000000000000000000024 /* WaveDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveDecoder.swift; sourceTree = "<group>"; };
 		A10000000000000000000025 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = Vendor/whisper.cpp/build-apple/whisper.xcframework; sourceTree = SOURCE_ROOT; };
 		A10000000000000000000026 /* WhisperModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModelStore.swift; sourceTree = "<group>"; };
+		A10000000000000000000028 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -112,6 +114,7 @@
 			children = (
 				A10000000000000000000011 /* RSTApp.swift */,
 				A10000000000000000000019 /* Info.plist */,
+				A10000000000000000000028 /* Assets.xcassets */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -198,6 +201,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000027 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

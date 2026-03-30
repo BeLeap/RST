@@ -60,19 +60,20 @@ final class WhisperModelStore: ObservableObject {
     @Published private(set) var activeDownloadID: String?
     @Published private(set) var statusMessage = "Choose a Whisper model."
     @Published private(set) var lastErrorMessage: String?
+    @Published private(set) var activeDownloadProgress: Double?
 
     private let fileManager: FileManager
     private let transcriptStore: TranscriptStore
-    private let urlSession: URLSession
+    private let urlSessionConfiguration: URLSessionConfiguration
 
     init(
         fileManager: FileManager = .default,
         transcriptStore: TranscriptStore = TranscriptStore(),
-        urlSession: URLSession = .shared
+        urlSessionConfiguration: URLSessionConfiguration = .default
     ) {
         self.fileManager = fileManager
         self.transcriptStore = transcriptStore
-        self.urlSession = urlSession
+        self.urlSessionConfiguration = urlSessionConfiguration
         refreshLocalModels()
     }
 
@@ -166,6 +167,7 @@ final class WhisperModelStore: ObservableObject {
         }
 
         activeDownloadID = preset.id
+        activeDownloadProgress = nil
         lastErrorMessage = nil
         statusMessage = "Downloading \(preset.name) model..."
 
@@ -190,7 +192,11 @@ final class WhisperModelStore: ObservableObject {
                 try fileManager.removeItem(at: temporaryURL)
             }
 
-            let (downloadedFileURL, _) = try await urlSession.download(from: preset.downloadURL)
+            let downloadedFileURL = try await downloadFile(from: preset.downloadURL) { [weak self] progress in
+                Task { @MainActor [weak self] in
+                    self?.activeDownloadProgress = progress
+                }
+            }
             try fileManager.moveItem(at: downloadedFileURL, to: temporaryURL)
             try fileManager.moveItem(at: temporaryURL, to: destinationURL)
 
@@ -205,5 +211,82 @@ final class WhisperModelStore: ObservableObject {
         }
 
         activeDownloadID = nil
+        activeDownloadProgress = nil
+    }
+
+    private func downloadFile(from sourceURL: URL, onProgress: @escaping @Sendable (Double?) -> Void) async throws -> URL {
+        let progressDelegate = DownloadProgressDelegate(onProgress: onProgress)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: progressDelegate, delegateQueue: nil)
+        defer {
+            urlSession.invalidateAndCancel()
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let task = urlSession.downloadTask(with: sourceURL) { localURL, response, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    continuation.resume(throwing: DownloadError.invalidResponse)
+                    return
+                }
+
+                guard (200..<300).contains(httpResponse.statusCode) else {
+                    continuation.resume(throwing: DownloadError.invalidStatusCode(httpResponse.statusCode))
+                    return
+                }
+
+                guard let localURL else {
+                    continuation.resume(throwing: DownloadError.missingTemporaryFile)
+                    return
+                }
+
+                continuation.resume(returning: localURL)
+            }
+
+            task.resume()
+        }
+    }
+}
+
+private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
+    private let onProgress: @Sendable (Double?) -> Void
+
+    init(onProgress: @escaping @Sendable (Double?) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        guard totalBytesExpectedToWrite > 0 else {
+            onProgress(nil)
+            return
+        }
+
+        onProgress(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
+    }
+}
+
+private enum DownloadError: LocalizedError {
+    case invalidResponse
+    case invalidStatusCode(Int)
+    case missingTemporaryFile
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return "Model download returned an invalid response."
+        case .invalidStatusCode(let statusCode):
+            return "Model download failed with status code \(statusCode)."
+        case .missingTemporaryFile:
+            return "Model download completed without a file."
+        }
     }
 }

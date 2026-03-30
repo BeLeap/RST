@@ -58,8 +58,14 @@ struct RecorderView: View {
                                 }
 
                                 if modelStore.activeDownloadID == preset.id {
-                                    ProgressView()
-                                        .controlSize(.small)
+                                    if let activeDownloadProgress = modelStore.activeDownloadProgress {
+                                        ProgressView(value: activeDownloadProgress, total: 1.0)
+                                            .frame(width: 120)
+                                            .controlSize(.small)
+                                    } else {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    }
                                 }
                             }
                         }

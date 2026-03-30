@@ -182,8 +182,8 @@ final class WhisperModelStore: ObservableObject {
         lastErrorMessage = nil
         statusMessage = "Downloading \(preset.name) model..."
 
-        let downloadTask = Task { [weak self] in
-            await self?.performDownload(preset: preset, force: force)
+        let downloadTask = Task {
+            await performDownload(preset: preset, force: force)
         }
         activeDownloadTask = downloadTask
         await downloadTask.value

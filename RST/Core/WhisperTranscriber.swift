@@ -49,14 +49,13 @@ struct WhisperTranscriber {
         return WhisperTranscriptionSession(
             context: context,
             store: store,
-            language: normalizedLanguage(configuration.language),
-            fileManager: fileManager
+            language: normalizedLanguage(configuration.language)
         )
     }
 
-    func transcribe(audioURL: URL, configuration: WhisperConfiguration) async throws -> TranscriptionResult {
+    func transcribe(audioURL: URL, configuration: WhisperConfiguration) throws -> TranscriptionResult {
         let session = try makeSession(configuration: configuration)
-        return try await session.transcribe(audioURL: audioURL)
+        return try session.transcribe(audioURL: audioURL)
     }
 
     private func normalizedLanguage(_ language: String) -> String {
@@ -65,26 +64,23 @@ struct WhisperTranscriber {
     }
 }
 
-actor WhisperTranscriptionSession {
+final class WhisperTranscriptionSession: @unchecked Sendable {
     private let context: EmbeddedWhisperContext
     private let store: TranscriptStore
     private let language: String
-    private let fileManager: FileManager
 
     init(
         context: EmbeddedWhisperContext,
         store: TranscriptStore,
-        language: String,
-        fileManager: FileManager
+        language: String
     ) {
         self.context = context
         self.store = store
         self.language = language
-        self.fileManager = fileManager
     }
 
-    func transcribe(audioURL: URL) async throws -> TranscriptionResult {
-        guard fileManager.fileExists(atPath: audioURL.path) else {
+    func transcribe(audioURL: URL) throws -> TranscriptionResult {
+        guard FileManager.default.fileExists(atPath: audioURL.path) else {
             throw WhisperTranscriptionError.invalidAudioPath(audioURL.path)
         }
 
@@ -95,7 +91,7 @@ actor WhisperTranscriptionSession {
             return TranscriptionResult(transcriptURL: transcriptURL, transcriptText: "")
         }
 
-        let transcriptText = try await context.transcribe(samples: samples, language: language)
+        let transcriptText = try context.transcribe(samples: samples, language: language)
         let transcriptURL = store.transcriptURL(for: audioURL)
         try transcriptText.write(to: transcriptURL, atomically: true, encoding: .utf8)
 
@@ -106,7 +102,7 @@ actor WhisperTranscriptionSession {
     }
 }
 
-actor EmbeddedWhisperContext {
+final class EmbeddedWhisperContext: @unchecked Sendable {
     private let context: OpaquePointer
 
     private init(context: OpaquePointer) {

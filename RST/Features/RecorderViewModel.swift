@@ -66,13 +66,15 @@ final class RecorderViewModel: ObservableObject {
             try store.ensureDirectories()
             try await recorder.requestPermission()
             let url = try store.nextRecordingURL()
-            liveSession = try? transcriber.makeSession(configuration: configuration)
+            let modelErrorMessage = try prepareLiveSession(configuration: configuration)
             try recorder.startRecording(to: url)
             activeRecordingURL = url
             isRecording = true
             selectedTranscript = "Listening..."
             scheduleLiveUpdates()
-            if liveSession == nil {
+            if let modelErrorMessage {
+                statusMessage = "Recording to \(url.lastPathComponent). \(modelErrorMessage)"
+            } else if liveSession == nil {
                 statusMessage = "Recording to \(url.lastPathComponent). Live transcription is unavailable until a valid model path is set."
             } else {
                 statusMessage = "Recording to \(url.lastPathComponent). Live transcription is active."
@@ -113,7 +115,7 @@ final class RecorderViewModel: ObservableObject {
     }
 
     func transcribeLatest(configuration: WhisperConfiguration) async {
-        guard let activeRecordingURL ?? recordings.first?.audioURL else {
+        guard let activeRecordingURL = activeRecordingURL ?? recordings.first?.audioURL else {
             statusMessage = "There is no recording to transcribe."
             return
         }
@@ -182,7 +184,7 @@ final class RecorderViewModel: ObservableObject {
         statusMessage = "Transcribing \(audioURL.lastPathComponent) with embedded Whisper..."
 
         do {
-            let result = try await transcriber.transcribe(audioURL: audioURL, configuration: configuration)
+            let result = try transcriber.transcribe(audioURL: audioURL, configuration: configuration)
             try reloadRecordings()
             selectedRecordingID = audioURL.path
             selectedTranscript = result.transcriptText
@@ -201,10 +203,12 @@ final class RecorderViewModel: ObservableObject {
     private func scheduleLiveUpdates() {
         liveUpdateTimer?.invalidate()
         liveUpdateTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            self.liveUpdateTask?.cancel()
-            self.liveUpdateTask = Task { [weak self] in
-                await self?.refreshLiveTranscript(finalPass: false)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.liveUpdateTask?.cancel()
+                self.liveUpdateTask = Task { @MainActor [weak self] in
+                    await self?.refreshLiveTranscript(finalPass: false)
+                }
             }
         }
     }
@@ -221,7 +225,7 @@ final class RecorderViewModel: ObservableObject {
         isTranscribing = true
 
         do {
-            let result = try await liveSession.transcribe(audioURL: activeRecordingURL)
+            let result = try liveSession.transcribe(audioURL: activeRecordingURL)
             selectedTranscript = result.transcriptText.isEmpty ? "Listening..." : result.transcriptText
             if finalPass {
                 try reloadRecordings()
@@ -249,6 +253,22 @@ final class RecorderViewModel: ObservableObject {
             statusMessage = "Exported \(sourceURL.lastPathComponent)"
         } catch {
             statusMessage = error.localizedDescription
+        }
+    }
+
+    private func prepareLiveSession(configuration: WhisperConfiguration) throws -> String? {
+        let modelPath = configuration.modelPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !modelPath.isEmpty else {
+            liveSession = nil
+            return "Live transcription is unavailable until a model is selected."
+        }
+
+        do {
+            liveSession = try transcriber.makeSession(configuration: configuration)
+            return nil
+        } catch {
+            liveSession = nil
+            return "Live transcription is unavailable: \(error.localizedDescription)"
         }
     }
 }

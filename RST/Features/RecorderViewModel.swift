@@ -271,22 +271,26 @@ final class RecorderViewModel: ObservableObject {
             return false
         }
 
-        Task {
-            let urls = await loadDroppedFileURLs(from: acceptedProviders)
-            await importAudioFiles(from: urls)
+        Task { @MainActor in
+            let dropLoadResult = await loadDroppedFileURLs(from: acceptedProviders)
+            await importAudioFiles(from: dropLoadResult.urls, preflightErrors: dropLoadResult.errors)
         }
 
         return true
     }
 
-    func importAudioFiles(from urls: [URL]) async {
+    func importAudioFiles(from urls: [URL], preflightErrors: [String] = []) async {
         guard !urls.isEmpty else {
-            statusMessage = "Could not read dropped files."
+            if preflightErrors.isEmpty {
+                statusMessage = "Could not read dropped files."
+            } else {
+                statusMessage = "Could not read dropped files: \(preflightErrors.joined(separator: " | "))"
+            }
             return
         }
 
         var importedURLs: [URL] = []
-        var errors: [String] = []
+        var errors = preflightErrors
 
         for url in urls {
             do {
@@ -323,26 +327,21 @@ final class RecorderViewModel: ObservableObject {
         }
     }
 
-    private func loadDroppedFileURLs(from providers: [NSItemProvider]) async -> [URL] {
-        await withTaskGroup(of: URL?.self, returning: [URL].self) { group in
-            for provider in providers {
-                group.addTask {
-                    do {
-                        return try await self.loadDroppedFileURL(from: provider)
-                    } catch {
-                        return nil
-                    }
-                }
-            }
+    private func loadDroppedFileURLs(from providers: [NSItemProvider]) async -> (urls: [URL], errors: [String]) {
+        var urls: [URL] = []
+        var errors: [String] = []
 
-            var urls: [URL] = []
-            for await result in group {
-                if let result {
-                    urls.append(result)
-                }
+        for provider in providers {
+            do {
+                let url = try await loadDroppedFileURL(from: provider)
+                urls.append(url)
+            } catch {
+                let providerName = provider.suggestedName ?? "unknown file"
+                errors.append("\(providerName): \(error.localizedDescription)")
             }
-            return urls
         }
+
+        return (urls, errors)
     }
 
     private func loadDroppedFileURL(from provider: NSItemProvider) async throws -> URL {

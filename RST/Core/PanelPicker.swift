@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 
+@MainActor
 enum PanelPicker {
     static func chooseFile(title: String, allowedFileTypes: [String]? = nil) -> URL? {
         let panel = NSOpenPanel()

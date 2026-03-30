@@ -5,8 +5,10 @@ struct RecorderView: View {
     @StateObject private var modelStore = WhisperModelStore()
     @State private var pendingDeleteRecordingID: RecordingItem.ID?
 
-    @AppStorage("whisperModelSelection") private var whisperModelSelection = WhisperModelPreset.customID
-    @AppStorage("whisperModelPath") private var whisperModelPath = ""
+    @AppStorage("whisperLiveModelSelection") private var whisperLiveModelSelection = "tiny"
+    @AppStorage("whisperLiveModelPath") private var whisperLiveModelPath = ""
+    @AppStorage("whisperBatchModelSelection") private var whisperBatchModelSelection = WhisperModelPreset.customID
+    @AppStorage("whisperBatchModelPath") private var whisperBatchModelPath = ""
     @AppStorage("whisperLanguage") private var whisperLanguage = "auto"
 
     var body: some View {
@@ -16,8 +18,11 @@ struct RecorderView: View {
             detail
         }
         .navigationSplitViewStyle(.balanced)
-        .task(id: whisperModelSelection) {
-            await modelStore.prepareSelection(whisperModelSelection)
+        .task(id: "\(whisperLiveModelSelection)|\(whisperBatchModelSelection)") {
+            await modelStore.prepareSelection(whisperLiveModelSelection)
+            if whisperBatchModelSelection != whisperLiveModelSelection {
+                await modelStore.prepareSelection(whisperBatchModelSelection)
+            }
         }
     }
 
@@ -29,10 +34,10 @@ struct RecorderView: View {
                         .font(.title2.bold())
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Model")
+                        Text("Live Model (realtime)")
                             .font(.headline)
 
-                        Picker("Model", selection: $whisperModelSelection) {
+                        Picker("Live Model", selection: $whisperLiveModelSelection) {
                             Text("Custom Path").tag(WhisperModelPreset.customID)
                             ForEach(WhisperModelPreset.catalog) { preset in
                                 Text("\(preset.name) (\(preset.sizeDescription))").tag(preset.id)
@@ -40,7 +45,7 @@ struct RecorderView: View {
                         }
                         .pickerStyle(.menu)
 
-                        if let preset = WhisperModelPreset.preset(id: whisperModelSelection) {
+                        if let preset = WhisperModelPreset.preset(id: whisperLiveModelSelection) {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(modelStore.localPath(for: preset))
                                     .font(.caption)
@@ -50,7 +55,7 @@ struct RecorderView: View {
                                 HStack(spacing: 8) {
                                     Button(modelStore.isDownloaded(preset) ? "Redownload" : "Download") {
                                         Task {
-                                            await modelStore.redownloadSelectedModel(whisperModelSelection)
+                                            await modelStore.redownloadSelectedModel(whisperLiveModelSelection)
                                         }
                                     }
                                     .disabled(modelStore.activeDownloadID != nil)
@@ -78,11 +83,67 @@ struct RecorderView: View {
                                 }
                             }
                         } else {
-                            pathField(title: "Model (.bin)", text: $whisperModelPath, browseAction: {
+                            pathField(title: "Live Model (.bin)", text: $whisperLiveModelPath, browseAction: {
                                 if let url = PanelPicker.chooseFile(title: "Choose Whisper model", allowedFileTypes: ["bin"]) {
-                                    whisperModelPath = url.path
+                                    whisperLiveModelPath = url.path
                                 }
                             })
+                        }
+
+                        Text("Batch Model (final transcript)")
+                            .font(.headline)
+
+                        Picker("Batch Model", selection: $whisperBatchModelSelection) {
+                            Text("Custom Path").tag(WhisperModelPreset.customID)
+                            ForEach(WhisperModelPreset.catalog) { preset in
+                                Text("\(preset.name) (\(preset.sizeDescription))").tag(preset.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+
+                        if let preset = WhisperModelPreset.preset(id: whisperBatchModelSelection) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(modelStore.localPath(for: preset))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+
+                                HStack(spacing: 8) {
+                                    Button(modelStore.isDownloaded(preset) ? "Redownload" : "Download") {
+                                        Task {
+                                            await modelStore.redownloadSelectedModel(whisperBatchModelSelection)
+                                        }
+                                    }
+                                    .disabled(modelStore.activeDownloadID != nil)
+
+                                    if modelStore.activeDownloadID == preset.id {
+                                        Button("Cancel") {
+                                            modelStore.cancelActiveDownload()
+                                        }
+                                    }
+
+                                    if modelStore.activeDownloadID == preset.id {
+                                        if let activeDownloadProgress = modelStore.activeDownloadProgress {
+                                            ProgressView(value: activeDownloadProgress, total: 1.0)
+                                                .frame(width: 120)
+                                                .controlSize(.small)
+                                        } else {
+                                            ProgressView()
+                                                .controlSize(.small)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            pathField(title: "Batch Model (.bin)", text: $whisperBatchModelPath, browseAction: {
+                                if let url = PanelPicker.chooseFile(title: "Choose Whisper model", allowedFileTypes: ["bin"]) {
+                                    whisperBatchModelPath = url.path
+                                }
+                            })
+                        }
+
+                        Button("Open Models Folder") {
+                            modelStore.openModelsFolder()
                         }
                     }
 
@@ -93,7 +154,12 @@ struct RecorderView: View {
                             .textFieldStyle(.roundedBorder)
                     }
 
-                    Text(modelStore.selectionSummary(selectedModelID: whisperModelSelection, customModelPath: whisperModelPath))
+                    Text("Live: \(modelStore.selectionSummary(selectedModelID: whisperLiveModelSelection, customModelPath: whisperLiveModelPath))")
+                        .font(.footnote)
+                        .foregroundStyle(modelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("Batch: \(modelStore.selectionSummary(selectedModelID: whisperBatchModelSelection, customModelPath: whisperBatchModelPath))")
                         .font(.footnote)
                         .foregroundStyle(modelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
                         .fixedSize(horizontal: false, vertical: true)
@@ -120,7 +186,9 @@ struct RecorderView: View {
                         .disabled(viewModel.isRecording)
 
                         Button("Stop Recording") {
-                            viewModel.stopRecording()
+                            Task {
+                                await viewModel.stopRecording(finalConfiguration: batchWhisperConfiguration)
+                            }
                         }
                         .keyboardShortcut(".", modifiers: [.command])
                         .disabled(!viewModel.isRecording)
@@ -129,7 +197,7 @@ struct RecorderView: View {
                     HStack(spacing: 12) {
                         Button("Transcribe Latest") {
                             Task {
-                                await viewModel.transcribeLatest(configuration: whisperConfiguration)
+                                await viewModel.transcribeLatest(configuration: batchWhisperConfiguration)
                             }
                         }
                         .disabled(viewModel.isRecording || viewModel.isTranscribing)
@@ -174,7 +242,7 @@ struct RecorderView: View {
                             Button("Transcribe") {
                                 viewModel.selectRecording(id: item.id)
                                 Task {
-                                    await viewModel.transcribeSelected(configuration: whisperConfiguration)
+                                    await viewModel.transcribeSelected(configuration: batchWhisperConfiguration)
                                 }
                             }
                             .disabled(viewModel.isRecording || viewModel.isTranscribing)
@@ -280,8 +348,18 @@ struct RecorderView: View {
     private var whisperConfiguration: WhisperConfiguration {
         WhisperConfiguration(
             modelPath: modelStore.resolveModelPath(
-                selectedModelID: whisperModelSelection,
-                customModelPath: whisperModelPath
+                selectedModelID: whisperLiveModelSelection,
+                customModelPath: whisperLiveModelPath
+            ),
+            language: whisperLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private var batchWhisperConfiguration: WhisperConfiguration {
+        WhisperConfiguration(
+            modelPath: modelStore.resolveModelPath(
+                selectedModelID: whisperBatchModelSelection,
+                customModelPath: whisperBatchModelPath
             ),
             language: whisperLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
         )

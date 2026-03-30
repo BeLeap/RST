@@ -40,11 +40,17 @@ You can also use `just build-whisper`, `just build-app`, or `just build`.
 
 3. Open [`RST.xcodeproj`](/Users/beleap/pj/github.com/beleap/RST/RST.xcodeproj/project.pbxproj) in Xcode.
 4. Build and run the `RST` target.
-5. In the sidebar, set:
+5. If macOS blocks the app after moving it, clear quarantine attributes and relaunch:
+
+```bash
+xattr -cr /Application/RST.app
+```
+
+6. In the sidebar, set:
    - a Whisper preset to auto-download, or a full path to your own `.bin` model
    - the transcription language, or `auto`
-6. Start recording. The transcript view updates periodically while audio is still being captured.
-7. Stop recording for a final pass, or export the selected `.wav` / `.txt` files from the sidebar.
+7. Start recording. The transcript view updates periodically while audio is still being captured.
+8. Stop recording for a final pass, or export the selected `.wav` / `.txt` files from the sidebar.
 
 ## Development Environment
 

@@ -25,9 +25,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Install build dependencies
-        run: brew install cmake ninja
-
       - name: Build embedded whisper framework
         run: ./scripts/build-whisper-framework.sh
 

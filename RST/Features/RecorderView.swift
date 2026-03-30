@@ -3,7 +3,7 @@ import SwiftUI
 struct RecorderView: View {
     @ObservedObject var viewModel: RecorderViewModel
     @StateObject private var modelStore = WhisperModelStore()
-    @State private var isShowingDeleteConfirmation = false
+    @State private var pendingDeleteRecordingID: RecordingItem.ID?
 
     @AppStorage("whisperModelSelection") private var whisperModelSelection = WhisperModelPreset.customID
     @AppStorage("whisperModelPath") private var whisperModelPath = ""
@@ -144,6 +144,39 @@ struct RecorderView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    .contentShape(Rectangle())
+                    .contextMenu {
+                        Button("Rename…") {
+                            viewModel.selectRecording(id: item.id)
+                            viewModel.renameRecording(id: item.id)
+                        }
+
+                        Button("Delete", role: .destructive) {
+                            viewModel.selectRecording(id: item.id)
+                            pendingDeleteRecordingID = item.id
+                        }
+
+                        Divider()
+
+                        Button("Transcribe") {
+                            viewModel.selectRecording(id: item.id)
+                            Task {
+                                await viewModel.transcribeSelected(configuration: whisperConfiguration)
+                            }
+                        }
+                        .disabled(viewModel.isRecording || viewModel.isTranscribing)
+
+                        Button("Reveal Audio") {
+                            viewModel.selectRecording(id: item.id)
+                            viewModel.revealAudio()
+                        }
+
+                        Button("Reveal Transcript") {
+                            viewModel.selectRecording(id: item.id)
+                            viewModel.revealTranscript()
+                        }
+                        .disabled(item.transcriptURL == nil)
+                    }
                 }
                 .frame(minHeight: 260)
 
@@ -175,8 +208,13 @@ struct RecorderView: View {
                     }
                     .disabled(viewModel.selectedRecording?.transcriptURL == nil)
 
+                    Button("Rename") {
+                        viewModel.renameSelectedRecording()
+                    }
+                    .disabled(viewModel.selectedRecording == nil || viewModel.isRecording || viewModel.isTranscribing)
+
                     Button("Delete Recording", role: .destructive) {
-                        isShowingDeleteConfirmation = true
+                        pendingDeleteRecordingID = viewModel.selectedRecordingID
                     }
                     .disabled(viewModel.selectedRecording == nil || viewModel.isRecording || viewModel.isTranscribing)
                 }
@@ -186,9 +224,21 @@ struct RecorderView: View {
         }
         .padding(20)
         .frame(minWidth: 340)
-        .alert("Delete recording?", isPresented: $isShowingDeleteConfirmation) {
+        .alert("Delete recording?", isPresented: Binding(
+            get: { pendingDeleteRecordingID != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingDeleteRecordingID = nil
+                }
+            }
+        )) {
             Button("Delete", role: .destructive) {
-                viewModel.deleteSelectedRecording()
+                guard let pendingDeleteRecordingID else {
+                    viewModel.deleteSelectedRecording()
+                    return
+                }
+                viewModel.deleteRecording(id: pendingDeleteRecordingID)
+                self.pendingDeleteRecordingID = nil
             }
             Button("Cancel", role: .cancel) {}
         } message: {

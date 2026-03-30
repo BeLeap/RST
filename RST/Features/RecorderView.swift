@@ -54,6 +54,12 @@ struct RecorderView: View {
                                 }
                                 .disabled(modelStore.activeDownloadID != nil)
 
+                                if modelStore.activeDownloadID == preset.id {
+                                    Button("Cancel") {
+                                        modelStore.cancelActiveDownload()
+                                    }
+                                }
+
                                 Button("Open Models Folder") {
                                     modelStore.openModelsFolder()
                                 }

@@ -65,6 +65,7 @@ final class WhisperModelStore: ObservableObject {
     private let fileManager: FileManager
     private let transcriptStore: TranscriptStore
     private let urlSessionConfiguration: URLSessionConfiguration
+    private var activeDownloadTask: Task<Void, Never>?
 
     init(
         fileManager: FileManager = .default,
@@ -150,6 +151,16 @@ final class WhisperModelStore: ObservableObject {
         await download(preset: preset, force: true)
     }
 
+    func cancelActiveDownload() {
+        guard activeDownloadTask != nil else {
+            statusMessage = "No model download is currently in progress."
+            return
+        }
+
+        activeDownloadTask?.cancel()
+        statusMessage = "Canceling model download..."
+    }
+
     func openModelsFolder() {
         do {
             try transcriptStore.ensureModelDirectory()
@@ -161,7 +172,7 @@ final class WhisperModelStore: ObservableObject {
     }
 
     private func download(preset: WhisperModelPreset, force: Bool = false) async {
-        guard activeDownloadID == nil || activeDownloadID == preset.id else {
+        guard activeDownloadTask == nil else {
             statusMessage = "Another model download is already in progress."
             return
         }
@@ -171,11 +182,24 @@ final class WhisperModelStore: ObservableObject {
         lastErrorMessage = nil
         statusMessage = "Downloading \(preset.name) model..."
 
+        let downloadTask = Task {
+            await performDownload(preset: preset, force: force)
+        }
+        activeDownloadTask = downloadTask
+        await downloadTask.value
+
+        activeDownloadTask = nil
+        activeDownloadID = nil
+        activeDownloadProgress = nil
+    }
+
+    private func performDownload(preset: WhisperModelPreset, force: Bool) async {
         let destinationURL = localURL(for: preset)
         let temporaryURL = destinationURL.appendingPathExtension("download")
 
         do {
             try transcriptStore.ensureModelDirectory()
+            try Task.checkCancellation()
 
             if force, fileManager.fileExists(atPath: destinationURL.path) {
                 try fileManager.removeItem(at: destinationURL)
@@ -184,7 +208,6 @@ final class WhisperModelStore: ObservableObject {
             if fileManager.fileExists(atPath: destinationURL.path) {
                 downloadedModelIDs.insert(preset.id)
                 statusMessage = "Using downloaded \(preset.name) model."
-                activeDownloadID = nil
                 return
             }
 
@@ -205,21 +228,22 @@ final class WhisperModelStore: ObservableObject {
                     }
                 }
             }
+
+            try Task.checkCancellation()
             try fileManager.moveItem(at: downloadedFileURL, to: temporaryURL)
+            try Task.checkCancellation()
             try fileManager.moveItem(at: temporaryURL, to: destinationURL)
 
             downloadedModelIDs.insert(preset.id)
             statusMessage = "Downloaded \(preset.name) model."
+        } catch is CancellationError {
+            cleanupTemporaryDownloadFile(at: temporaryURL)
+            statusMessage = "Canceled download for \(preset.name)."
         } catch {
-            if fileManager.fileExists(atPath: temporaryURL.path) {
-                try? fileManager.removeItem(at: temporaryURL)
-            }
+            cleanupTemporaryDownloadFile(at: temporaryURL)
             lastErrorMessage = "Failed to download \(preset.name): \(error.localizedDescription)"
             statusMessage = lastErrorMessage ?? "Failed to download \(preset.name)."
         }
-
-        activeDownloadID = nil
-        activeDownloadProgress = nil
     }
 
     private func downloadFile(from sourceURL: URL, onProgress: @escaping (Double?) -> Void) async throws -> URL {
@@ -253,6 +277,7 @@ final class WhisperModelStore: ObservableObject {
 
         do {
             for try await byte in bytes {
+                try Task.checkCancellation()
                 writeBuffer.append(byte)
                 downloadedBytes += 1
 
@@ -285,6 +310,17 @@ final class WhisperModelStore: ObservableObject {
         }
 
         return temporaryFileURL
+    }
+
+    private func cleanupTemporaryDownloadFile(at temporaryURL: URL) {
+        if fileManager.fileExists(atPath: temporaryURL.path) {
+            do {
+                try fileManager.removeItem(at: temporaryURL)
+            } catch {
+                lastErrorMessage = "Failed to remove temporary download file: \(error.localizedDescription)"
+                statusMessage = lastErrorMessage ?? "Failed to clean up temporary download data."
+            }
+        }
     }
 }
 

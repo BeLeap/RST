@@ -10,7 +10,7 @@ on:
 
 jobs:
   build-dmg:
-    runs-on: macos-14
+    runs-on: macos-latest
     defaults:
       run:
         shell: zsh -euo pipefail {0}

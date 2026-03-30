@@ -60,19 +60,20 @@ final class WhisperModelStore: ObservableObject {
     @Published private(set) var activeDownloadID: String?
     @Published private(set) var statusMessage = "Choose a Whisper model."
     @Published private(set) var lastErrorMessage: String?
+    @Published private(set) var activeDownloadProgress: Double?
 
     private let fileManager: FileManager
     private let transcriptStore: TranscriptStore
-    private let urlSession: URLSession
+    private let urlSessionConfiguration: URLSessionConfiguration
 
     init(
         fileManager: FileManager = .default,
         transcriptStore: TranscriptStore = TranscriptStore(),
-        urlSession: URLSession = .shared
+        urlSessionConfiguration: URLSessionConfiguration = .default
     ) {
         self.fileManager = fileManager
         self.transcriptStore = transcriptStore
-        self.urlSession = urlSession
+        self.urlSessionConfiguration = urlSessionConfiguration
         refreshLocalModels()
     }
 
@@ -166,6 +167,7 @@ final class WhisperModelStore: ObservableObject {
         }
 
         activeDownloadID = preset.id
+        activeDownloadProgress = nil
         lastErrorMessage = nil
         statusMessage = "Downloading \(preset.name) model..."
 
@@ -190,7 +192,19 @@ final class WhisperModelStore: ObservableObject {
                 try fileManager.removeItem(at: temporaryURL)
             }
 
-            let (downloadedFileURL, _) = try await urlSession.download(from: preset.downloadURL)
+            let downloadedFileURL = try await downloadFile(from: preset.downloadURL) { [weak self] progress in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.activeDownloadProgress = progress
+                    if let progress {
+                        let clampedProgress = min(max(progress, 0), 1)
+                        let percent = Int((clampedProgress * 100).rounded())
+                        self.statusMessage = "Downloading \(preset.name) model... \(percent)%"
+                    } else {
+                        self.statusMessage = "Downloading \(preset.name) model..."
+                    }
+                }
+            }
             try fileManager.moveItem(at: downloadedFileURL, to: temporaryURL)
             try fileManager.moveItem(at: temporaryURL, to: destinationURL)
 
@@ -205,5 +219,51 @@ final class WhisperModelStore: ObservableObject {
         }
 
         activeDownloadID = nil
+        activeDownloadProgress = nil
+    }
+
+    private func downloadFile(from sourceURL: URL, onProgress: @escaping (Double?) -> Void) async throws -> URL {
+        let urlSession = URLSession(configuration: urlSessionConfiguration)
+        let task = urlSession.downloadTask(with: sourceURL)
+
+        let progressObservation = task.progress.observe(\.fractionCompleted, options: [.new, .initial]) { progress, _ in
+            if progress.totalUnitCount > 0 {
+                onProgress(progress.fractionCompleted)
+            } else {
+                onProgress(nil)
+            }
+        }
+
+        defer {
+            progressObservation.invalidate()
+            urlSession.invalidateAndCancel()
+        }
+
+        task.resume()
+        let (localURL, response) = try await task.value
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw DownloadError.invalidResponse
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw DownloadError.invalidStatusCode(httpResponse.statusCode)
+        }
+
+        return localURL
+    }
+}
+
+private enum DownloadError: LocalizedError {
+    case invalidResponse
+    case invalidStatusCode(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return "Model download returned an invalid response."
+        case .invalidStatusCode(let statusCode):
+            return "Model download failed with status code \(statusCode)."
+        }
     }
 }

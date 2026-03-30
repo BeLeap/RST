@@ -230,6 +230,7 @@ struct RecorderView: View {
                     }
                     .disabled(viewModel.selectedRecording == nil || viewModel.isRecording || viewModel.isTranscribing)
                 }
+                .padding(.bottom, 12)
             }
 
             Spacer()

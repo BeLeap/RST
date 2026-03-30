@@ -21,165 +21,166 @@ struct RecorderView: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Local Whisper")
-                    .font(.title2.bold())
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Local Whisper")
+                        .font(.title2.bold())
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Model")
-                        .font(.headline)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Model")
+                            .font(.headline)
 
-                    Picker("Model", selection: $whisperModelSelection) {
-                        Text("Custom Path").tag(WhisperModelPreset.customID)
-                        ForEach(WhisperModelPreset.catalog) { preset in
-                            Text("\(preset.name) (\(preset.sizeDescription))").tag(preset.id)
+                        Picker("Model", selection: $whisperModelSelection) {
+                            Text("Custom Path").tag(WhisperModelPreset.customID)
+                            ForEach(WhisperModelPreset.catalog) { preset in
+                                Text("\(preset.name) (\(preset.sizeDescription))").tag(preset.id)
+                            }
                         }
-                    }
-                    .pickerStyle(.menu)
+                        .pickerStyle(.menu)
 
-                    if let preset = WhisperModelPreset.preset(id: whisperModelSelection) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(modelStore.localPath(for: preset))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
+                        if let preset = WhisperModelPreset.preset(id: whisperModelSelection) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(modelStore.localPath(for: preset))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
 
-                            HStack(spacing: 8) {
-                                Button(modelStore.isDownloaded(preset) ? "Redownload" : "Download") {
-                                    Task {
-                                        await modelStore.redownloadSelectedModel(whisperModelSelection)
+                                HStack(spacing: 8) {
+                                    Button(modelStore.isDownloaded(preset) ? "Redownload" : "Download") {
+                                        Task {
+                                            await modelStore.redownloadSelectedModel(whisperModelSelection)
+                                        }
+                                    }
+                                    .disabled(modelStore.activeDownloadID != nil)
+
+                                    Button("Open Models Folder") {
+                                        modelStore.openModelsFolder()
+                                    }
+
+                                    if modelStore.activeDownloadID == preset.id {
+                                        ProgressView()
+                                            .controlSize(.small)
                                     }
                                 }
-                                .disabled(modelStore.activeDownloadID != nil)
-
-                                Button("Open Models Folder") {
-                                    modelStore.openModelsFolder()
-                                }
-
-                                if modelStore.activeDownloadID == preset.id {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                }
                             }
-                        }
-                    } else {
-                        pathField(title: "Model (.bin)", text: $whisperModelPath, browseAction: {
-                            if let url = PanelPicker.chooseFile(title: "Choose Whisper model", allowedFileTypes: ["bin"]) {
-                                whisperModelPath = url.path
-                            }
-                        })
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Language")
-                        .font(.headline)
-                    TextField("auto", text: $whisperLanguage)
-                        .textFieldStyle(.roundedBorder)
-                }
-
-                Text(modelStore.selectionSummary(selectedModelID: whisperModelSelection, customModelPath: whisperModelPath))
-                    .font(.footnote)
-                    .foregroundStyle(modelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text("The app records WAV files locally and transcribes them with embedded Whisper. No external API is used.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Recorder")
-                    .font(.title3.bold())
-
-                HStack(spacing: 12) {
-                    Button("Start Recording") {
-                        Task {
-                            await viewModel.startRecording(configuration: whisperConfiguration)
+                        } else {
+                            pathField(title: "Model (.bin)", text: $whisperModelPath, browseAction: {
+                                if let url = PanelPicker.chooseFile(title: "Choose Whisper model", allowedFileTypes: ["bin"]) {
+                                    whisperModelPath = url.path
+                                }
+                            })
                         }
                     }
-                    .keyboardShortcut("r")
-                    .disabled(viewModel.isRecording)
 
-                    Button("Stop Recording") {
-                        viewModel.stopRecording()
-                    }
-                    .keyboardShortcut(".", modifiers: [.command])
-                    .disabled(!viewModel.isRecording)
-                }
-
-                HStack(spacing: 12) {
-                    Button("Transcribe Latest") {
-                        Task {
-                            await viewModel.transcribeLatest(configuration: whisperConfiguration)
-                        }
-                    }
-                    .disabled(viewModel.isRecording || viewModel.isTranscribing)
-
-                    Button("Open Recordings Folder") {
-                        viewModel.openRecordingsFolder()
-                    }
-                }
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Files")
-                    .font(.title3.bold())
-
-                List(viewModel.recordings, selection: Binding(
-                    get: { viewModel.selectedRecordingID },
-                    set: { viewModel.selectRecording(id: $0) }
-                )) { item in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.title)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Language")
                             .font(.headline)
-                        Text(item.createdAt.formatted(date: .abbreviated, time: .standard))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        TextField("auto", text: $whisperLanguage)
+                            .textFieldStyle(.roundedBorder)
                     }
-                }
-                .frame(minHeight: 120, idealHeight: 220)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Button("Transcribe Selected") {
-                        Task {
-                            await viewModel.transcribeSelected(configuration: whisperConfiguration)
+                    Text(modelStore.selectionSummary(selectedModelID: whisperModelSelection, customModelPath: whisperModelPath))
+                        .font(.footnote)
+                        .foregroundStyle(modelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("The app records WAV files locally and transcribes them with embedded Whisper. No external API is used.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Recorder")
+                        .font(.title3.bold())
+
+                    HStack(spacing: 12) {
+                        Button("Start Recording") {
+                            Task {
+                                await viewModel.startRecording(configuration: whisperConfiguration)
+                            }
+                        }
+                        .keyboardShortcut("r")
+                        .disabled(viewModel.isRecording)
+
+                        Button("Stop Recording") {
+                            viewModel.stopRecording()
+                        }
+                        .keyboardShortcut(".", modifiers: [.command])
+                        .disabled(!viewModel.isRecording)
+                    }
+
+                    HStack(spacing: 12) {
+                        Button("Transcribe Latest") {
+                            Task {
+                                await viewModel.transcribeLatest(configuration: whisperConfiguration)
+                            }
+                        }
+                        .disabled(viewModel.isRecording || viewModel.isTranscribing)
+
+                        Button("Open Recordings Folder") {
+                            viewModel.openRecordingsFolder()
                         }
                     }
-                    .disabled(viewModel.selectedRecording == nil || viewModel.isRecording || viewModel.isTranscribing)
-
-                    Button("Reveal Audio") {
-                        viewModel.revealAudio()
-                    }
-                    .disabled(viewModel.selectedRecording == nil)
-
-                    Button("Reveal Transcript") {
-                        viewModel.revealTranscript()
-                    }
-                    .disabled(viewModel.selectedRecording?.transcriptURL == nil)
-
-                    Button("Export Audio") {
-                        viewModel.exportAudio()
-                    }
-                    .disabled(viewModel.selectedRecording == nil)
-
-                    Button("Export Transcript") {
-                        viewModel.exportTranscript()
-                    }
-                    .disabled(viewModel.selectedRecording?.transcriptURL == nil)
                 }
-                .padding(.bottom, 8)
-            }
 
-            Spacer()
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Files")
+                        .font(.title3.bold())
+
+                    List(viewModel.recordings, selection: Binding(
+                        get: { viewModel.selectedRecordingID },
+                        set: { viewModel.selectRecording(id: $0) }
+                    )) { item in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.title)
+                                .font(.headline)
+                            Text(item.createdAt.formatted(date: .abbreviated, time: .standard))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(minHeight: 260)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button("Transcribe Selected") {
+                            Task {
+                                await viewModel.transcribeSelected(configuration: whisperConfiguration)
+                            }
+                        }
+                        .disabled(viewModel.selectedRecording == nil || viewModel.isRecording || viewModel.isTranscribing)
+
+                        Button("Reveal Audio") {
+                            viewModel.revealAudio()
+                        }
+                        .disabled(viewModel.selectedRecording == nil)
+
+                        Button("Reveal Transcript") {
+                            viewModel.revealTranscript()
+                        }
+                        .disabled(viewModel.selectedRecording?.transcriptURL == nil)
+
+                        Button("Export Audio") {
+                            viewModel.exportAudio()
+                        }
+                        .disabled(viewModel.selectedRecording == nil)
+
+                        Button("Export Transcript") {
+                            viewModel.exportTranscript()
+                        }
+                        .disabled(viewModel.selectedRecording?.transcriptURL == nil)
+                    }
+                    .padding(.bottom, 8)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
         }
-        .padding(20)
         .frame(minWidth: 340)
     }
 

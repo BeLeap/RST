@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import UniformTypeIdentifiers
 
 @MainActor
 final class RecorderViewModel: ObservableObject {
@@ -256,6 +257,120 @@ final class RecorderViewModel: ObservableObject {
         }
 
         renameRecording(id: selectedRecordingID)
+    }
+
+    func importDroppedAudio(providers: [NSItemProvider]) -> Bool {
+        guard !providers.isEmpty else {
+            statusMessage = "No files were dropped."
+            return false
+        }
+
+        let acceptedProviders = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
+        guard !acceptedProviders.isEmpty else {
+            statusMessage = "Drop one or more local .wav files."
+            return false
+        }
+
+        Task {
+            let urls = await loadDroppedFileURLs(from: acceptedProviders)
+            await importAudioFiles(from: urls)
+        }
+
+        return true
+    }
+
+    func importAudioFiles(from urls: [URL]) async {
+        guard !urls.isEmpty else {
+            statusMessage = "Could not read dropped files."
+            return
+        }
+
+        var importedURLs: [URL] = []
+        var errors: [String] = []
+
+        for url in urls {
+            do {
+                let importedURL = try store.importRecording(from: url)
+                importedURLs.append(importedURL)
+            } catch {
+                errors.append("\(url.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+
+        do {
+            try reloadRecordings()
+        } catch {
+            statusMessage = "Imported \(importedURLs.count) file(s), but failed to refresh the list: \(error.localizedDescription)"
+            return
+        }
+
+        if let firstImported = importedURLs.first,
+           let importedItem = recordings.first(where: { $0.audioURL == firstImported }) {
+            selectedRecordingID = importedItem.id
+            do {
+                try loadTranscript(for: importedItem)
+            } catch {
+                selectedTranscript = error.localizedDescription
+            }
+        }
+
+        if errors.isEmpty {
+            statusMessage = "Imported \(importedURLs.count) WAV file(s)."
+        } else if importedURLs.isEmpty {
+            statusMessage = "Import failed: \(errors.joined(separator: " | "))"
+        } else {
+            statusMessage = "Imported \(importedURLs.count) file(s), \(errors.count) failed: \(errors.joined(separator: " | "))"
+        }
+    }
+
+    private func loadDroppedFileURLs(from providers: [NSItemProvider]) async -> [URL] {
+        await withTaskGroup(of: URL?.self, returning: [URL].self) { group in
+            for provider in providers {
+                group.addTask {
+                    do {
+                        return try await self.loadDroppedFileURL(from: provider)
+                    } catch {
+                        return nil
+                    }
+                }
+            }
+
+            var urls: [URL] = []
+            for await result in group {
+                if let result {
+                    urls.append(result)
+                }
+            }
+            return urls
+        }
+    }
+
+    private func loadDroppedFileURL(from provider: NSItemProvider) async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                if let data = item as? Data,
+                   let url = URL(dataRepresentation: data, relativeTo: nil) {
+                    continuation.resume(returning: url)
+                    return
+                }
+
+                if let url = item as? URL {
+                    continuation.resume(returning: url)
+                    return
+                }
+
+                continuation.resume(throwing: NSError(
+                    domain: "RecorderViewModel",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to decode dropped file URL."]
+                ))
+            }
+        }
     }
 
     private func transcribe(audioURL: URL, configuration: WhisperConfiguration) async {

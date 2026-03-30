@@ -161,4 +161,59 @@ struct TranscriptStore {
             )
         }
     }
+
+    func importRecording(from sourceURL: URL) throws -> URL {
+        try ensureDirectories()
+
+        guard sourceURL.isFileURL else {
+            throw NSError(
+                domain: "TranscriptStore",
+                code: 5,
+                userInfo: [NSLocalizedDescriptionKey: "Only local files can be imported."]
+            )
+        }
+
+        let standardizedSourceURL = sourceURL.standardizedFileURL
+        let sourceExtension = standardizedSourceURL.pathExtension.lowercased()
+        guard sourceExtension == "wav" else {
+            throw NSError(
+                domain: "TranscriptStore",
+                code: 6,
+                userInfo: [NSLocalizedDescriptionKey: "Only .wav files can be imported."]
+            )
+        }
+
+        guard fileManager.fileExists(atPath: standardizedSourceURL.path) else {
+            throw NSError(
+                domain: "TranscriptStore",
+                code: 7,
+                userInfo: [NSLocalizedDescriptionKey: "File not found: \(standardizedSourceURL.lastPathComponent)"]
+            )
+        }
+
+        let standardizedRecordingsDirectory = recordingsDirectory.standardizedFileURL
+        if standardizedSourceURL.deletingLastPathComponent() == standardizedRecordingsDirectory {
+            return standardizedSourceURL
+        }
+
+        let destinationURL = uniqueImportDestination(for: standardizedSourceURL)
+        try fileManager.copyItem(at: standardizedSourceURL, to: destinationURL)
+        return destinationURL
+    }
+
+    private func uniqueImportDestination(for sourceURL: URL) -> URL {
+        let baseName = sourceURL.deletingPathExtension().lastPathComponent
+        let ext = sourceURL.pathExtension
+        var candidateURL = recordingsDirectory.appendingPathComponent(sourceURL.lastPathComponent)
+        var suffix = 2
+
+        while fileManager.fileExists(atPath: candidateURL.path) {
+            candidateURL = recordingsDirectory
+                .appendingPathComponent("\(baseName)-\(suffix)")
+                .appendingPathExtension(ext)
+            suffix += 1
+        }
+
+        return candidateURL
+    }
 }

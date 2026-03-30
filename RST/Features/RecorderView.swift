@@ -4,6 +4,7 @@ struct RecorderView: View {
     @ObservedObject var viewModel: RecorderViewModel
     @StateObject private var modelStore = WhisperModelStore()
     @State private var pendingDeleteRecordingID: RecordingItem.ID?
+    @State private var isFileDropTargeted = false
 
     @AppStorage("whisperLiveModelSelection") private var whisperLiveModelSelection = "tiny"
     @AppStorage("whisperLiveModelPath") private var whisperLiveModelPath = ""
@@ -214,63 +215,84 @@ struct RecorderView: View {
                     Text("Files")
                         .font(.title3.bold())
 
-                    List(viewModel.recordings, selection: Binding(
-                        get: { viewModel.selectedRecordingID },
-                        set: { viewModel.selectRecording(id: $0) }
-                    )) { item in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(item.title)
-                                .font(.headline)
-                            Text(item.createdAt.formatted(date: .abbreviated, time: .standard))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .contentShape(Rectangle())
-                        .contextMenu {
-                            Button("Rename…") {
-                                viewModel.selectRecording(id: item.id)
-                                viewModel.renameRecording(id: item.id)
+                    ZStack {
+                        List(viewModel.recordings, selection: Binding(
+                            get: { viewModel.selectedRecordingID },
+                            set: { viewModel.selectRecording(id: $0) }
+                        )) { item in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.title)
+                                    .font(.headline)
+                                Text(item.createdAt.formatted(date: .abbreviated, time: .standard))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
-
-                            Button("Delete", role: .destructive) {
-                                viewModel.selectRecording(id: item.id)
-                                pendingDeleteRecordingID = item.id
-                            }
-
-                            Divider()
-
-                            Button("Transcribe") {
-                                viewModel.selectRecording(id: item.id)
-                                Task {
-                                    await viewModel.transcribeSelected(configuration: batchWhisperConfiguration)
+                            .contentShape(Rectangle())
+                            .contextMenu {
+                                Button("Rename…") {
+                                    viewModel.selectRecording(id: item.id)
+                                    viewModel.renameRecording(id: item.id)
                                 }
-                            }
-                            .disabled(viewModel.isRecording || viewModel.isTranscribing)
 
-                            Button("Reveal Audio") {
-                                viewModel.selectRecording(id: item.id)
-                                viewModel.revealAudio()
-                            }
+                                Button("Delete", role: .destructive) {
+                                    viewModel.selectRecording(id: item.id)
+                                    pendingDeleteRecordingID = item.id
+                                }
 
-                            Button("Reveal Transcript") {
-                                viewModel.selectRecording(id: item.id)
-                                viewModel.revealTranscript()
-                            }
-                            .disabled(item.transcriptURL == nil)
+                                Divider()
 
-                            Button("Export Audio") {
-                                viewModel.selectRecording(id: item.id)
-                                viewModel.exportAudio()
-                            }
+                                Button("Transcribe") {
+                                    viewModel.selectRecording(id: item.id)
+                                    Task {
+                                        await viewModel.transcribeSelected(configuration: batchWhisperConfiguration)
+                                    }
+                                }
+                                .disabled(viewModel.isRecording || viewModel.isTranscribing)
 
-                            Button("Export Transcript") {
-                                viewModel.selectRecording(id: item.id)
-                                viewModel.exportTranscript()
+                                Button("Reveal Audio") {
+                                    viewModel.selectRecording(id: item.id)
+                                    viewModel.revealAudio()
+                                }
+
+                                Button("Reveal Transcript") {
+                                    viewModel.selectRecording(id: item.id)
+                                    viewModel.revealTranscript()
+                                }
+                                .disabled(item.transcriptURL == nil)
+
+                                Button("Export Audio") {
+                                    viewModel.selectRecording(id: item.id)
+                                    viewModel.exportAudio()
+                                }
+
+                                Button("Export Transcript") {
+                                    viewModel.selectRecording(id: item.id)
+                                    viewModel.exportTranscript()
+                                }
+                                .disabled(item.transcriptURL == nil)
                             }
-                            .disabled(item.transcriptURL == nil)
+                        }
+
+                        if isFileDropTargeted {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6]))
+                                )
+                                .overlay(
+                                    Text("Drop WAV files to import")
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                )
+                                .padding(8)
+                                .allowsHitTesting(false)
                         }
                     }
                     .frame(minHeight: 260)
+                    .onDrop(of: ["public.file-url"], isTargeted: $isFileDropTargeted) { providers in
+                        viewModel.importDroppedAudio(providers: providers)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

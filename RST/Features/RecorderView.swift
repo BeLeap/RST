@@ -189,49 +189,20 @@ struct RecorderView: View {
                                 viewModel.revealTranscript()
                             }
                             .disabled(item.transcriptURL == nil)
+
+                            Button("Export Audio") {
+                                viewModel.selectRecording(id: item.id)
+                                viewModel.exportAudio()
+                            }
+
+                            Button("Export Transcript") {
+                                viewModel.selectRecording(id: item.id)
+                                viewModel.exportTranscript()
+                            }
+                            .disabled(item.transcriptURL == nil)
                         }
                     }
                     .frame(minHeight: 260)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Button("Transcribe Selected") {
-                            Task {
-                                await viewModel.transcribeSelected(configuration: whisperConfiguration)
-                            }
-                        }
-                        .disabled(viewModel.selectedRecording == nil || viewModel.isRecording || viewModel.isTranscribing)
-
-                        Button("Reveal Audio") {
-                            viewModel.revealAudio()
-                        }
-                        .disabled(viewModel.selectedRecording == nil)
-
-                        Button("Reveal Transcript") {
-                            viewModel.revealTranscript()
-                        }
-                        .disabled(viewModel.selectedRecording?.transcriptURL == nil)
-
-                        Button("Export Audio") {
-                            viewModel.exportAudio()
-                        }
-                        .disabled(viewModel.selectedRecording == nil)
-
-                        Button("Export Transcript") {
-                            viewModel.exportTranscript()
-                        }
-                        .disabled(viewModel.selectedRecording?.transcriptURL == nil)
-
-                        Button("Rename") {
-                            viewModel.renameSelectedRecording()
-                        }
-                        .disabled(viewModel.selectedRecording == nil || viewModel.isRecording || viewModel.isTranscribing)
-
-                        Button("Delete Recording", role: .destructive) {
-                            pendingDeleteRecordingID = viewModel.selectedRecordingID
-                        }
-                        .disabled(viewModel.selectedRecording == nil || viewModel.isRecording || viewModel.isTranscribing)
-                    }
-                    .padding(.bottom, 12)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

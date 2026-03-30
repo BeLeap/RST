@@ -1,0 +1,51 @@
+name: Build DMG
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-dmg:
+    runs-on: macos-14
+    defaults:
+      run:
+        shell: zsh -euo pipefail {0}
+    env:
+      DERIVED_DATA: ${{ github.workspace }}/build/DerivedData
+      APP_PATH: ${{ github.workspace }}/build/DerivedData/Build/Products/Release/RST.app
+      DMG_PATH: ${{ github.workspace }}/build/RST.dmg
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Install build dependencies
+        run: brew install cmake ninja
+
+      - name: Build embedded whisper framework
+        run: ./scripts/build-whisper-framework.sh
+
+      - name: Build macOS app
+        run: |
+          xcodebuild \
+            -project RST.xcodeproj \
+            -scheme RST \
+            -configuration Release \
+            -derivedDataPath "$DERIVED_DATA" \
+            build
+
+      - name: Package DMG
+        run: ./scripts/create-dmg.sh "$APP_PATH" "$DMG_PATH"
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RST-app
+          path: ${{ env.APP_PATH }}
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RST-dmg
+          path: ${{ env.DMG_PATH }}

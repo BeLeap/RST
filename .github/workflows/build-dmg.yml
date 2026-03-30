@@ -44,13 +44,13 @@ jobs:
         run: ./scripts/create-dmg.sh "$APP_PATH" "$DMG_PATH"
 
       - name: Upload app artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: RST-app
           path: ${{ env.APP_PATH }}
 
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: RST-dmg
           path: ${{ env.DMG_PATH }}

@@ -12,13 +12,16 @@ final class RecorderViewModel: ObservableObject {
 
     private let store: TranscriptStore
     private let recorder: AudioRecorderService
-    private let transcriber: WhisperCLITranscriber
+    private let transcriber: WhisperTranscriber
     private var activeRecordingURL: URL?
+    private var liveSession: WhisperTranscriptionSession?
+    private var liveUpdateTimer: Timer?
+    private var liveUpdateTask: Task<Void, Never>?
 
     init(
         store: TranscriptStore = TranscriptStore(),
         recorder: AudioRecorderService = AudioRecorderService(),
-        transcriber: WhisperCLITranscriber = WhisperCLITranscriber()
+        transcriber: WhisperTranscriber = WhisperTranscriber()
     ) {
         self.store = store
         self.recorder = recorder
@@ -58,15 +61,22 @@ final class RecorderViewModel: ObservableObject {
         }
     }
 
-    func startRecording() async {
+    func startRecording(configuration: WhisperConfiguration) async {
         do {
             try store.ensureDirectories()
             try await recorder.requestPermission()
             let url = try store.nextRecordingURL()
+            liveSession = try? transcriber.makeSession(configuration: configuration)
             try recorder.startRecording(to: url)
             activeRecordingURL = url
             isRecording = true
-            statusMessage = "Recording to \(url.lastPathComponent)"
+            selectedTranscript = "Listening..."
+            scheduleLiveUpdates()
+            if liveSession == nil {
+                statusMessage = "Recording to \(url.lastPathComponent). Live transcription is unavailable until a valid model path is set."
+            } else {
+                statusMessage = "Recording to \(url.lastPathComponent). Live transcription is active."
+            }
         } catch {
             statusMessage = error.localizedDescription
         }
@@ -74,6 +84,8 @@ final class RecorderViewModel: ObservableObject {
 
     func stopRecording() {
         do {
+            liveUpdateTimer?.invalidate()
+            liveUpdateTimer = nil
             let url = try recorder.stopRecording()
             activeRecordingURL = url
             isRecording = false
@@ -83,6 +95,9 @@ final class RecorderViewModel: ObservableObject {
                 try loadTranscript(for: item)
             }
             statusMessage = "Saved recording \(url.lastPathComponent)"
+            Task {
+                await refreshLiveTranscript(finalPass: true)
+            }
         } catch {
             statusMessage = error.localizedDescription
         }
@@ -128,9 +143,43 @@ final class RecorderViewModel: ObservableObject {
         NSWorkspace.shared.open(store.recordingsDirectory)
     }
 
+    func exportAudio() {
+        guard let recording = selectedRecording else {
+            statusMessage = "Select a recording first."
+            return
+        }
+
+        guard let destination = PanelPicker.saveFile(
+            title: "Export Recording",
+            suggestedName: recording.audioURL.lastPathComponent,
+            allowedFileTypes: [recording.audioURL.pathExtension]
+        ) else {
+            return
+        }
+
+        exportItem(at: recording.audioURL, to: destination)
+    }
+
+    func exportTranscript() {
+        guard let transcriptURL = selectedRecording?.transcriptURL else {
+            statusMessage = "The selected recording does not have a transcript yet."
+            return
+        }
+
+        guard let destination = PanelPicker.saveFile(
+            title: "Export Transcript",
+            suggestedName: transcriptURL.lastPathComponent,
+            allowedFileTypes: ["txt"]
+        ) else {
+            return
+        }
+
+        exportItem(at: transcriptURL, to: destination)
+    }
+
     private func transcribe(audioURL: URL, configuration: WhisperConfiguration) async {
         isTranscribing = true
-        statusMessage = "Transcribing \(audioURL.lastPathComponent) with local Whisper..."
+        statusMessage = "Transcribing \(audioURL.lastPathComponent) with embedded Whisper..."
 
         do {
             let result = try await transcriber.transcribe(audioURL: audioURL, configuration: configuration)
@@ -147,5 +196,59 @@ final class RecorderViewModel: ObservableObject {
 
     private func loadTranscript(for item: RecordingItem) throws {
         selectedTranscript = try store.loadTranscript(for: item)
+    }
+
+    private func scheduleLiveUpdates() {
+        liveUpdateTimer?.invalidate()
+        liveUpdateTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.liveUpdateTask?.cancel()
+            self.liveUpdateTask = Task { [weak self] in
+                await self?.refreshLiveTranscript(finalPass: false)
+            }
+        }
+    }
+
+    private func refreshLiveTranscript(finalPass: Bool) async {
+        guard let activeRecordingURL, let liveSession else {
+            return
+        }
+
+        if !finalPass && isTranscribing {
+            return
+        }
+
+        isTranscribing = true
+
+        do {
+            let result = try await liveSession.transcribe(audioURL: activeRecordingURL)
+            selectedTranscript = result.transcriptText.isEmpty ? "Listening..." : result.transcriptText
+            if finalPass {
+                try reloadRecordings()
+                selectedRecordingID = activeRecordingURL.path
+                statusMessage = "Saved recording and transcript."
+                self.liveSession = nil
+            } else {
+                statusMessage = "Recording and updating transcript..."
+            }
+        } catch {
+            if finalPass {
+                statusMessage = error.localizedDescription
+            }
+        }
+
+        isTranscribing = false
+    }
+
+    private func exportItem(at sourceURL: URL, to destinationURL: URL) {
+        do {
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+            try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+            statusMessage = "Exported \(sourceURL.lastPathComponent)"
+        } catch {
+            statusMessage = error.localizedDescription
+        }
     }
 }

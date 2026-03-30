@@ -8,14 +8,31 @@
 		A10000000000000000000002 /* RecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* RecorderView.swift */; };
 		A10000000000000000000003 /* RecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* RecorderViewModel.swift */; };
 		A10000000000000000000004 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000014 /* AudioRecorderService.swift */; };
-		A10000000000000000000005 /* WhisperCLITranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* WhisperCLITranscriber.swift */; };
+		A10000000000000000000005 /* WhisperTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* WhisperTranscriber.swift */; };
 		A10000000000000000000006 /* TranscriptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* TranscriptStore.swift */; };
 		A10000000000000000000007 /* RecordingItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* RecordingItem.swift */; };
 		A10000000000000000000008 /* PanelPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000018 /* PanelPicker.swift */; };
 		A10000000000000000000009 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* AVFoundation.framework */; };
 		A1000000000000000000000A /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000022 /* AppKit.framework */; };
 		A1000000000000000000000B /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000023 /* UniformTypeIdentifiers.framework */; };
+		A1000000000000000000000C /* WaveDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000024 /* WaveDecoder.swift */; };
+		A1000000000000000000000D /* whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* whisper.xcframework */; };
+		A1000000000000000000000E /* whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A10000000000000000000033 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				A1000000000000000000000E /* whisper.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A10000000000000000000010 /* RST.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = RST.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -23,7 +40,7 @@
 		A10000000000000000000012 /* RecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderView.swift; sourceTree = "<group>"; };
 		A10000000000000000000013 /* RecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderViewModel.swift; sourceTree = "<group>"; };
 		A10000000000000000000014 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
-		A10000000000000000000015 /* WhisperCLITranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperCLITranscriber.swift; sourceTree = "<group>"; };
+		A10000000000000000000015 /* WhisperTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperTranscriber.swift; sourceTree = "<group>"; };
 		A10000000000000000000016 /* TranscriptStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStore.swift; sourceTree = "<group>"; };
 		A10000000000000000000017 /* RecordingItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingItem.swift; sourceTree = "<group>"; };
 		A10000000000000000000018 /* PanelPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelPicker.swift; sourceTree = "<group>"; };
@@ -31,6 +48,8 @@
 		A10000000000000000000021 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		A10000000000000000000022 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		A10000000000000000000023 /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
+		A10000000000000000000024 /* WaveDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveDecoder.swift; sourceTree = "<group>"; };
+		A10000000000000000000025 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = Vendor/whisper.cpp/build-apple/whisper.xcframework; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -41,6 +60,7 @@
 				A10000000000000000000009 /* AVFoundation.framework in Frameworks */,
 				A1000000000000000000000A /* AppKit.framework in Frameworks */,
 				A1000000000000000000000B /* UniformTypeIdentifiers.framework in Frameworks */,
+				A1000000000000000000000D /* whisper.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -72,6 +92,7 @@
 				A10000000000000000000021 /* AVFoundation.framework */,
 				A10000000000000000000022 /* AppKit.framework */,
 				A10000000000000000000023 /* UniformTypeIdentifiers.framework */,
+				A10000000000000000000025 /* whisper.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -106,10 +127,11 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000014 /* AudioRecorderService.swift */,
-				A10000000000000000000015 /* WhisperCLITranscriber.swift */,
+				A10000000000000000000015 /* WhisperTranscriber.swift */,
 				A10000000000000000000016 /* TranscriptStore.swift */,
 				A10000000000000000000017 /* RecordingItem.swift */,
 				A10000000000000000000018 /* PanelPicker.swift */,
+				A10000000000000000000024 /* WaveDecoder.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -124,6 +146,7 @@
 				A10000000000000000000031 /* Sources */,
 				A10000000000000000000030 /* Frameworks */,
 				A10000000000000000000032 /* Resources */,
+				A10000000000000000000033 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -186,10 +209,11 @@
 				A10000000000000000000002 /* RecorderView.swift in Sources */,
 				A10000000000000000000003 /* RecorderViewModel.swift in Sources */,
 				A10000000000000000000004 /* AudioRecorderService.swift in Sources */,
-				A10000000000000000000005 /* WhisperCLITranscriber.swift in Sources */,
+				A10000000000000000000005 /* WhisperTranscriber.swift in Sources */,
 				A10000000000000000000006 /* TranscriptStore.swift in Sources */,
 				A10000000000000000000007 /* RecordingItem.swift in Sources */,
 				A10000000000000000000008 /* PanelPicker.swift in Sources */,
+				A1000000000000000000000C /* WaveDecoder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -11,4 +11,12 @@ enum PanelPicker {
         panel.allowedFileTypes = allowedFileTypes
         return panel.runModal() == .OK ? panel.url : nil
     }
+
+    static func saveFile(title: String, suggestedName: String, allowedFileTypes: [String]? = nil) -> URL? {
+        let panel = NSSavePanel()
+        panel.title = title
+        panel.nameFieldStringValue = suggestedName
+        panel.allowedFileTypes = allowedFileTypes
+        return panel.runModal() == .OK ? panel.url : nil
+    }
 }

@@ -3,7 +3,6 @@ import SwiftUI
 struct RecorderView: View {
     @ObservedObject var viewModel: RecorderViewModel
 
-    @AppStorage("whisperCLIPath") private var whisperCLIPath = ""
     @AppStorage("whisperModelPath") private var whisperModelPath = ""
     @AppStorage("whisperLanguage") private var whisperLanguage = "auto"
 
@@ -22,12 +21,6 @@ struct RecorderView: View {
                 Text("Local Whisper")
                     .font(.title2.bold())
 
-                pathField(title: "whisper-cli", text: $whisperCLIPath, browseAction: {
-                    if let url = PanelPicker.chooseFile(title: "Choose whisper-cli") {
-                        whisperCLIPath = url.path
-                    }
-                })
-
                 pathField(title: "Model (.bin)", text: $whisperModelPath, browseAction: {
                     if let url = PanelPicker.chooseFile(title: "Choose Whisper model", allowedFileTypes: ["bin"]) {
                         whisperModelPath = url.path
@@ -41,7 +34,7 @@ struct RecorderView: View {
                         .textFieldStyle(.roundedBorder)
                 }
 
-                Text("The app records WAV files locally, then runs `whisper-cli` directly on your Mac. No external API is used.")
+                Text("The app records WAV files locally and transcribes them with embedded Whisper. No external API is used.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -56,11 +49,11 @@ struct RecorderView: View {
                 HStack(spacing: 12) {
                     Button("Start Recording") {
                         Task {
-                            await viewModel.startRecording()
+                            await viewModel.startRecording(configuration: whisperConfiguration)
                         }
                     }
                     .keyboardShortcut("r")
-                    .disabled(viewModel.isRecording || viewModel.isTranscribing)
+                    .disabled(viewModel.isRecording)
 
                     Button("Stop Recording") {
                         viewModel.stopRecording()
@@ -120,6 +113,16 @@ struct RecorderView: View {
                         viewModel.revealTranscript()
                     }
                     .disabled(viewModel.selectedRecording?.transcriptURL == nil)
+
+                    Button("Export Audio") {
+                        viewModel.exportAudio()
+                    }
+                    .disabled(viewModel.selectedRecording == nil)
+
+                    Button("Export Transcript") {
+                        viewModel.exportTranscript()
+                    }
+                    .disabled(viewModel.selectedRecording?.transcriptURL == nil)
                 }
             }
 
@@ -177,7 +180,6 @@ struct RecorderView: View {
 
     private var whisperConfiguration: WhisperConfiguration {
         WhisperConfiguration(
-            executablePath: whisperCLIPath.trimmingCharacters(in: .whitespacesAndNewlines),
             modelPath: whisperModelPath.trimmingCharacters(in: .whitespacesAndNewlines),
             language: whisperLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
         )

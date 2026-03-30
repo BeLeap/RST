@@ -174,6 +174,7 @@ struct RecorderView: View {
                     }
                     .disabled(viewModel.selectedRecording?.transcriptURL == nil)
                 }
+                .padding(.bottom, 8)
             }
 
             Spacer()

@@ -61,6 +61,7 @@ final class WhisperModelStore: ObservableObject {
     @Published private(set) var statusMessage = "Choose a Whisper model."
     @Published private(set) var lastErrorMessage: String?
     @Published private(set) var activeDownloadProgress: Double?
+    @Published private(set) var activeDownloadRemainingTime: String?
 
     private let fileManager: FileManager
     private let transcriptStore: TranscriptStore
@@ -179,6 +180,7 @@ final class WhisperModelStore: ObservableObject {
 
         activeDownloadID = preset.id
         activeDownloadProgress = nil
+        activeDownloadRemainingTime = nil
         lastErrorMessage = nil
         statusMessage = "Downloading \(preset.name) model..."
 
@@ -191,6 +193,7 @@ final class WhisperModelStore: ObservableObject {
         activeDownloadTask = nil
         activeDownloadID = nil
         activeDownloadProgress = nil
+        activeDownloadRemainingTime = nil
     }
 
     private func performDownload(preset: WhisperModelPreset, force: Bool) async {
@@ -223,14 +226,19 @@ final class WhisperModelStore: ObservableObject {
                 from: preset.downloadURL,
                 to: temporaryURL,
                 existingBytes: existingBytes
-            ) { [weak self] progress in
+            ) { [weak self] update in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
-                    self.activeDownloadProgress = progress
-                    if let progress {
+                    self.activeDownloadProgress = update.progress
+                    self.activeDownloadRemainingTime = self.formatRemainingTime(update.estimatedRemaining)
+                    if let progress = update.progress {
                         let clampedProgress = min(max(progress, 0), 1)
                         let percent = Int((clampedProgress * 100).rounded())
-                        self.statusMessage = "Downloading \(preset.name) model... \(percent)%"
+                        if let remainingTime = self.activeDownloadRemainingTime {
+                            self.statusMessage = "Downloading \(preset.name) model... \(percent)% (\(remainingTime) remaining)"
+                        } else {
+                            self.statusMessage = "Downloading \(preset.name) model... \(percent)%"
+                        }
                     } else {
                         self.statusMessage = "Downloading \(preset.name) model..."
                     }
@@ -259,7 +267,7 @@ final class WhisperModelStore: ObservableObject {
         from sourceURL: URL,
         to temporaryFileURL: URL,
         existingBytes: Int64,
-        onProgress: @escaping (Double?) -> Void
+        onProgress: @escaping (DownloadProgressUpdate) -> Void
     ) async throws -> URL {
         let urlSession = URLSession(configuration: urlSessionConfiguration)
         defer {
@@ -309,6 +317,7 @@ final class WhisperModelStore: ObservableObject {
         var writeBuffer = Data()
         writeBuffer.reserveCapacity(64 * 1024)
         var downloadedBytes: Int64 = existingBytes
+        let downloadStartTime = Date()
 
         do {
             for try await byte in bytes {
@@ -322,7 +331,17 @@ final class WhisperModelStore: ObservableObject {
                 }
 
                 if totalContentLength > 0, downloadedBytes % Int64(256 * 1024) == 0 {
-                    onProgress(Double(downloadedBytes) / Double(totalContentLength))
+                    onProgress(
+                        DownloadProgressUpdate(
+                            progress: Double(downloadedBytes) / Double(totalContentLength),
+                            estimatedRemaining: estimateRemainingTime(
+                                totalBytes: totalContentLength,
+                                downloadedBytes: downloadedBytes,
+                                existingBytes: existingBytes,
+                                downloadStartTime: downloadStartTime
+                            )
+                        )
+                    )
                 }
             }
 
@@ -336,9 +355,9 @@ final class WhisperModelStore: ObservableObject {
         }
 
         if expectedContentLength > 0 {
-            onProgress(1)
+            onProgress(DownloadProgressUpdate(progress: 1, estimatedRemaining: 0))
         } else {
-            onProgress(nil)
+            onProgress(DownloadProgressUpdate(progress: nil, estimatedRemaining: nil))
         }
 
         return temporaryFileURL
@@ -351,6 +370,44 @@ final class WhisperModelStore: ObservableObject {
         }
         return size.int64Value
     }
+
+    private func estimateRemainingTime(
+        totalBytes: Int64,
+        downloadedBytes: Int64,
+        existingBytes: Int64,
+        downloadStartTime: Date
+    ) -> TimeInterval? {
+        let downloadedThisAttempt = downloadedBytes - existingBytes
+        guard downloadedThisAttempt > 0 else { return nil }
+
+        let elapsed = Date().timeIntervalSince(downloadStartTime)
+        guard elapsed > 0 else { return nil }
+
+        let bytesPerSecond = Double(downloadedThisAttempt) / elapsed
+        guard bytesPerSecond.isFinite, bytesPerSecond > 0 else { return nil }
+
+        let remainingBytes = totalBytes - downloadedBytes
+        guard remainingBytes > 0 else { return 0 }
+
+        let remaining = Double(remainingBytes) / bytesPerSecond
+        return remaining.isFinite ? max(remaining, 0) : nil
+    }
+
+    private func formatRemainingTime(_ remaining: TimeInterval?) -> String? {
+        guard let remaining else { return nil }
+
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = remaining >= 3600 ? [.hour, .minute] : [.minute, .second]
+        formatter.unitsStyle = .abbreviated
+        formatter.maximumUnitCount = 2
+        formatter.zeroFormattingBehavior = [.dropLeading]
+        return formatter.string(from: remaining)
+    }
+}
+
+private struct DownloadProgressUpdate {
+    let progress: Double?
+    let estimatedRemaining: TimeInterval?
 }
 
 private enum DownloadError: LocalizedError {

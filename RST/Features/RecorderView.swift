@@ -71,13 +71,21 @@ struct RecorderView: View {
                                     }
 
                                     if modelStore.activeDownloadID == preset.id {
-                                        if let activeDownloadProgress = modelStore.activeDownloadProgress {
-                                            ProgressView(value: activeDownloadProgress, total: 1.0)
-                                                .frame(width: 120)
-                                                .controlSize(.small)
-                                        } else {
-                                            ProgressView()
-                                                .controlSize(.small)
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            if let activeDownloadProgress = modelStore.activeDownloadProgress {
+                                                ProgressView(value: activeDownloadProgress, total: 1.0)
+                                                    .frame(width: 120)
+                                                    .controlSize(.small)
+                                            } else {
+                                                ProgressView()
+                                                    .controlSize(.small)
+                                            }
+
+                                            if let remainingTime = modelStore.activeDownloadRemainingTime {
+                                                Text("\(remainingTime) remaining")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
                                         }
                                     }
                                 }
@@ -123,13 +131,21 @@ struct RecorderView: View {
                                     }
 
                                     if modelStore.activeDownloadID == preset.id {
-                                        if let activeDownloadProgress = modelStore.activeDownloadProgress {
-                                            ProgressView(value: activeDownloadProgress, total: 1.0)
-                                                .frame(width: 120)
-                                                .controlSize(.small)
-                                        } else {
-                                            ProgressView()
-                                                .controlSize(.small)
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            if let activeDownloadProgress = modelStore.activeDownloadProgress {
+                                                ProgressView(value: activeDownloadProgress, total: 1.0)
+                                                    .frame(width: 120)
+                                                    .controlSize(.small)
+                                            } else {
+                                                ProgressView()
+                                                    .controlSize(.small)
+                                            }
+
+                                            if let remainingTime = modelStore.activeDownloadRemainingTime {
+                                                Text("\(remainingTime) remaining")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
                                         }
                                     }
                                 }

@@ -12,6 +12,8 @@ final class RecorderViewModel: ObservableObject {
     @Published private(set) var isRecording = false
     @Published private(set) var isTranscribing = false
     @Published private(set) var statusMessage = "Ready."
+    @Published private(set) var activelyTranscribingRecordingID: RecordingItem.ID?
+    @Published private(set) var queuedTranscriptionRecordingIDs: [RecordingItem.ID] = []
 
     private let store: TranscriptStore
     private let recorder: AudioRecorderService
@@ -102,7 +104,7 @@ final class RecorderViewModel: ObservableObject {
             }
             liveSession = nil
             statusMessage = "Saved recording \(url.lastPathComponent). Starting final transcription..."
-            await transcribe(audioURL: url, configuration: finalConfiguration)
+            await enqueueTranscription(audioURL: url, configuration: finalConfiguration)
         } catch {
             statusMessage = error.localizedDescription
         }
@@ -114,7 +116,7 @@ final class RecorderViewModel: ObservableObject {
             return
         }
 
-        await transcribe(audioURL: item.audioURL, configuration: configuration)
+        await enqueueTranscription(audioURL: item.audioURL, configuration: configuration)
     }
 
     func transcribeLatest(configuration: WhisperConfiguration) async {
@@ -123,7 +125,7 @@ final class RecorderViewModel: ObservableObject {
             return
         }
 
-        await transcribe(audioURL: activeRecordingURL, configuration: configuration)
+        await enqueueTranscription(audioURL: activeRecordingURL, configuration: configuration)
     }
 
     func revealAudio() {
@@ -373,6 +375,7 @@ final class RecorderViewModel: ObservableObject {
     }
 
     private func transcribe(audioURL: URL, configuration: WhisperConfiguration) async {
+        activelyTranscribingRecordingID = audioURL.path
         isTranscribing = true
         statusMessage = "Transcribing \(audioURL.lastPathComponent) with embedded Whisper..."
 
@@ -386,7 +389,43 @@ final class RecorderViewModel: ObservableObject {
             statusMessage = error.localizedDescription
         }
 
+        activelyTranscribingRecordingID = nil
         isTranscribing = false
+    }
+
+    private func enqueueTranscription(audioURL: URL, configuration: WhisperConfiguration) async {
+        let recordingID = audioURL.path
+
+        if activelyTranscribingRecordingID == recordingID || queuedTranscriptionRecordingIDs.contains(recordingID) {
+            statusMessage = "\(audioURL.lastPathComponent) is already being processed."
+            return
+        }
+
+        if isTranscribing {
+            queuedTranscriptionRecordingIDs.append(recordingID)
+            let queuePosition = queuedTranscriptionRecordingIDs.count
+            statusMessage = "\(audioURL.lastPathComponent) added to queue (position \(queuePosition))."
+            return
+        }
+
+        await transcribe(audioURL: audioURL, configuration: configuration)
+
+        while let queuedRecordingID = queuedTranscriptionRecordingIDs.first {
+            queuedTranscriptionRecordingIDs.removeFirst()
+            guard let queuedRecording = recordings.first(where: { $0.id == queuedRecordingID }) else {
+                statusMessage = "A queued file was missing and skipped."
+                continue
+            }
+            await transcribe(audioURL: queuedRecording.audioURL, configuration: configuration)
+        }
+    }
+
+    func transcriptionQueuePosition(for recordingID: RecordingItem.ID) -> Int? {
+        guard let index = queuedTranscriptionRecordingIDs.firstIndex(of: recordingID) else {
+            return nil
+        }
+
+        return index + 1
     }
 
     private func loadTranscript(for item: RecordingItem) throws {

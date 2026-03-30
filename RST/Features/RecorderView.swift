@@ -217,7 +217,7 @@ struct RecorderView: View {
                                 await viewModel.transcribeLatest(configuration: batchWhisperConfiguration)
                             }
                         }
-                        .disabled(viewModel.isRecording || viewModel.isTranscribing)
+                        .disabled(viewModel.isRecording)
 
                         Button("Open Recordings Folder") {
                             viewModel.openRecordingsFolder()
@@ -237,8 +237,24 @@ struct RecorderView: View {
                             set: { viewModel.selectRecording(id: $0) }
                         )) { item in
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(item.title)
-                                    .font(.headline)
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Text(item.title)
+                                        .font(.headline)
+
+                                    if viewModel.activelyTranscribingRecordingID == item.id {
+                                        Text("Batch processing")
+                                            .font(.caption2.weight(.semibold))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(.orange.opacity(0.2), in: Capsule())
+                                    } else if let queuePosition = viewModel.transcriptionQueuePosition(for: item.id) {
+                                        Text("Queue #\(queuePosition)")
+                                            .font(.caption2.weight(.semibold))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(.secondary.opacity(0.2), in: Capsule())
+                                    }
+                                }
                                 Text(item.createdAt.formatted(date: .abbreviated, time: .standard))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -263,7 +279,7 @@ struct RecorderView: View {
                                         await viewModel.transcribeSelected(configuration: batchWhisperConfiguration)
                                     }
                                 }
-                                .disabled(viewModel.isRecording || viewModel.isTranscribing)
+                                .disabled(viewModel.isRecording)
 
                                 Button("Reveal Audio") {
                                     viewModel.selectRecording(id: item.id)

@@ -204,6 +204,9 @@ final class WhisperModelStore: ObservableObject {
             if force, fileManager.fileExists(atPath: destinationURL.path) {
                 try fileManager.removeItem(at: destinationURL)
             }
+            if force, fileManager.fileExists(atPath: temporaryURL.path) {
+                try fileManager.removeItem(at: temporaryURL)
+            }
 
             if fileManager.fileExists(atPath: destinationURL.path) {
                 downloadedModelIDs.insert(preset.id)
@@ -211,11 +214,12 @@ final class WhisperModelStore: ObservableObject {
                 return
             }
 
-            if fileManager.fileExists(atPath: temporaryURL.path) {
-                try fileManager.removeItem(at: temporaryURL)
-            }
-
-            let downloadedFileURL = try await downloadFile(from: preset.downloadURL) { [weak self] progress in
+            let existingBytes = currentFileSize(at: temporaryURL)
+            _ = try await downloadFile(
+                from: preset.downloadURL,
+                to: temporaryURL,
+                existingBytes: existingBytes
+            ) { [weak self] progress in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.activeDownloadProgress = progress
@@ -230,29 +234,40 @@ final class WhisperModelStore: ObservableObject {
             }
 
             try Task.checkCancellation()
-            try fileManager.moveItem(at: downloadedFileURL, to: temporaryURL)
-            try Task.checkCancellation()
             try fileManager.moveItem(at: temporaryURL, to: destinationURL)
 
             downloadedModelIDs.insert(preset.id)
             statusMessage = "Downloaded \(preset.name) model."
         } catch is CancellationError {
-            cleanupTemporaryDownloadFile(at: temporaryURL)
-            statusMessage = "Canceled download for \(preset.name)."
+            let partialSize = currentFileSize(at: temporaryURL)
+            if partialSize > 0 {
+                statusMessage = "Canceled download for \(preset.name). \(ByteCountFormatter.string(fromByteCount: partialSize, countStyle: .file)) saved for resume."
+            } else {
+                statusMessage = "Canceled download for \(preset.name)."
+            }
         } catch {
-            cleanupTemporaryDownloadFile(at: temporaryURL)
             lastErrorMessage = "Failed to download \(preset.name): \(error.localizedDescription)"
             statusMessage = lastErrorMessage ?? "Failed to download \(preset.name)."
         }
     }
 
-    private func downloadFile(from sourceURL: URL, onProgress: @escaping (Double?) -> Void) async throws -> URL {
+    private func downloadFile(
+        from sourceURL: URL,
+        to temporaryFileURL: URL,
+        existingBytes: Int64,
+        onProgress: @escaping (Double?) -> Void
+    ) async throws -> URL {
         let urlSession = URLSession(configuration: urlSessionConfiguration)
         defer {
             urlSession.invalidateAndCancel()
         }
 
-        let (bytes, response) = try await urlSession.bytes(from: sourceURL)
+        var request = URLRequest(url: sourceURL)
+        if existingBytes > 0 {
+            request.setValue("bytes=\(existingBytes)-", forHTTPHeaderField: "Range")
+        }
+
+        let (bytes, response) = try await urlSession.bytes(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw DownloadError.invalidResponse
@@ -262,18 +277,33 @@ final class WhisperModelStore: ObservableObject {
             throw DownloadError.invalidStatusCode(httpResponse.statusCode)
         }
 
-        let expectedContentLength = httpResponse.expectedContentLength
-        let temporaryFileURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: false)
-            .appendingPathExtension("download")
-        guard FileManager.default.createFile(atPath: temporaryFileURL.path, contents: nil) else {
-            throw DownloadError.unableToCreateTemporaryFile(temporaryFileURL.path)
+        if existingBytes > 0 && httpResponse.statusCode != 206 {
+            throw DownloadError.rangeNotSupported
         }
 
+        if !FileManager.default.fileExists(atPath: temporaryFileURL.path) {
+            guard FileManager.default.createFile(atPath: temporaryFileURL.path, contents: nil) else {
+                throw DownloadError.unableToCreateTemporaryFile(temporaryFileURL.path)
+            }
+        }
+
+        let expectedContentLength = httpResponse.expectedContentLength
+        let totalContentLength: Int64 = {
+            if httpResponse.statusCode == 206 {
+                return expectedContentLength > 0 ? existingBytes + expectedContentLength : -1
+            }
+            return expectedContentLength
+        }()
+
         let fileHandle = try FileHandle(forWritingTo: temporaryFileURL)
+        if existingBytes > 0 {
+            try fileHandle.seekToEnd()
+        } else {
+            try fileHandle.truncate(atOffset: 0)
+        }
         var writeBuffer = Data()
         writeBuffer.reserveCapacity(64 * 1024)
-        var downloadedBytes: Int64 = 0
+        var downloadedBytes: Int64 = existingBytes
 
         do {
             for try await byte in bytes {
@@ -286,8 +316,8 @@ final class WhisperModelStore: ObservableObject {
                     writeBuffer.removeAll(keepingCapacity: true)
                 }
 
-                if expectedContentLength > 0, downloadedBytes % Int64(256 * 1024) == 0 {
-                    onProgress(Double(downloadedBytes) / Double(expectedContentLength))
+                if totalContentLength > 0, downloadedBytes % Int64(256 * 1024) == 0 {
+                    onProgress(Double(downloadedBytes) / Double(totalContentLength))
                 }
             }
 
@@ -312,15 +342,12 @@ final class WhisperModelStore: ObservableObject {
         return temporaryFileURL
     }
 
-    private func cleanupTemporaryDownloadFile(at temporaryURL: URL) {
-        if fileManager.fileExists(atPath: temporaryURL.path) {
-            do {
-                try fileManager.removeItem(at: temporaryURL)
-            } catch {
-                lastErrorMessage = "Failed to remove temporary download file: \(error.localizedDescription)"
-                statusMessage = lastErrorMessage ?? "Failed to clean up temporary download data."
-            }
+    private func currentFileSize(at url: URL) -> Int64 {
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              let size = attributes[.size] as? NSNumber else {
+            return 0
         }
+        return size.int64Value
     }
 }
 
@@ -328,6 +355,7 @@ private enum DownloadError: LocalizedError {
     case invalidResponse
     case invalidStatusCode(Int)
     case unableToCreateTemporaryFile(String)
+    case rangeNotSupported
 
     var errorDescription: String? {
         switch self {
@@ -337,6 +365,8 @@ private enum DownloadError: LocalizedError {
             return "Model download failed with status code \(statusCode)."
         case .unableToCreateTemporaryFile(let filePath):
             return "Model download could not create a temporary file at \(filePath)."
+        case .rangeNotSupported:
+            return "Model host does not support resumable downloads for this file."
         }
     }
 }

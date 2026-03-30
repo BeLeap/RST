@@ -194,7 +194,15 @@ final class WhisperModelStore: ObservableObject {
 
             let downloadedFileURL = try await downloadFile(from: preset.downloadURL) { [weak self] progress in
                 Task { @MainActor [weak self] in
-                    self?.activeDownloadProgress = progress
+                    guard let self else { return }
+                    self.activeDownloadProgress = progress
+                    if let progress {
+                        let clampedProgress = min(max(progress, 0), 1)
+                        let percent = Int((clampedProgress * 100).rounded())
+                        self.statusMessage = "Downloading \(preset.name) model... \(percent)%"
+                    } else {
+                        self.statusMessage = "Downloading \(preset.name) model..."
+                    }
                 }
             }
             try fileManager.moveItem(at: downloadedFileURL, to: temporaryURL)

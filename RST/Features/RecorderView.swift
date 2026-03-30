@@ -146,7 +146,7 @@ struct RecorderView: View {
                 }
                 .frame(minHeight: 260)
 
-                HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
                     Button("Transcribe Selected") {
                         Task {
                             await viewModel.transcribeSelected(configuration: whisperConfiguration)

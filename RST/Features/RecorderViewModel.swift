@@ -116,15 +116,6 @@ final class RecorderViewModel: ObservableObject {
         await transcribe(audioURL: item.audioURL, configuration: configuration)
     }
 
-    func transcribeLatest(configuration: WhisperConfiguration) async {
-        guard let activeRecordingURL = activeRecordingURL ?? recordings.first?.audioURL else {
-            statusMessage = "There is no recording to transcribe."
-            return
-        }
-
-        await transcribe(audioURL: activeRecordingURL, configuration: configuration)
-    }
-
     func revealAudio() {
         guard let url = selectedRecording?.audioURL else {
             statusMessage = "Select a recording first."

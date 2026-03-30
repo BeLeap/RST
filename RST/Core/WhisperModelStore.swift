@@ -215,6 +215,10 @@ final class WhisperModelStore: ObservableObject {
             }
 
             let existingBytes = currentFileSize(at: temporaryURL)
+            if existingBytes > 0 {
+                let resumeSize = ByteCountFormatter.string(fromByteCount: existingBytes, countStyle: .file)
+                statusMessage = "Resuming \(preset.name) model download from \(resumeSize)..."
+            }
             _ = try await downloadFile(
                 from: preset.downloadURL,
                 to: temporaryURL,
@@ -263,6 +267,7 @@ final class WhisperModelStore: ObservableObject {
         }
 
         var request = URLRequest(url: sourceURL)
+        request.timeoutInterval = 300
         if existingBytes > 0 {
             request.setValue("bytes=\(existingBytes)-", forHTTPHeaderField: "Range")
         }
@@ -327,9 +332,6 @@ final class WhisperModelStore: ObservableObject {
             try fileHandle.close()
         } catch {
             try? fileHandle.close()
-            if FileManager.default.fileExists(atPath: temporaryFileURL.path) {
-                try? FileManager.default.removeItem(at: temporaryFileURL)
-            }
             throw error
         }
 

@@ -179,6 +179,29 @@ final class RecorderViewModel: ObservableObject {
         exportItem(at: transcriptURL, to: destination)
     }
 
+    func deleteSelectedRecording() {
+        guard let recording = selectedRecording else {
+            statusMessage = "Select a recording first."
+            return
+        }
+
+        do {
+            try store.deleteRecording(recording)
+            try reloadRecordings()
+            selectedRecordingID = recordings.first?.id
+
+            if let next = selectedRecording {
+                try loadTranscript(for: next)
+            } else {
+                selectedTranscript = "No transcript selected."
+            }
+
+            statusMessage = "Deleted \(recording.audioURL.lastPathComponent)"
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
     private func transcribe(audioURL: URL, configuration: WhisperConfiguration) async {
         isTranscribing = true
         statusMessage = "Transcribing \(audioURL.lastPathComponent) with embedded Whisper..."

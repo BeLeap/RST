@@ -3,6 +3,7 @@ import SwiftUI
 struct RecorderView: View {
     @ObservedObject var viewModel: RecorderViewModel
     @StateObject private var modelStore = WhisperModelStore()
+    @State private var isShowingDeleteConfirmation = false
 
     @AppStorage("whisperModelSelection") private var whisperModelSelection = WhisperModelPreset.customID
     @AppStorage("whisperModelPath") private var whisperModelPath = ""
@@ -173,6 +174,11 @@ struct RecorderView: View {
                         viewModel.exportTranscript()
                     }
                     .disabled(viewModel.selectedRecording?.transcriptURL == nil)
+
+                    Button("Delete Recording", role: .destructive) {
+                        isShowingDeleteConfirmation = true
+                    }
+                    .disabled(viewModel.selectedRecording == nil || viewModel.isRecording || viewModel.isTranscribing)
                 }
             }
 
@@ -180,6 +186,14 @@ struct RecorderView: View {
         }
         .padding(20)
         .frame(minWidth: 340)
+        .alert("Delete recording?", isPresented: $isShowingDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                viewModel.deleteSelectedRecording()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the selected recording and related transcript files from disk.")
+        }
     }
 
     private var detail: some View {

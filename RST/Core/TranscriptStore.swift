@@ -78,4 +78,19 @@ struct TranscriptStore {
 
         return try String(contentsOf: transcriptURL, encoding: .utf8)
     }
+
+    func deleteRecording(_ item: RecordingItem) throws {
+        if fileManager.fileExists(atPath: item.audioURL.path) {
+            try fileManager.removeItem(at: item.audioURL)
+        }
+
+        if let transcriptURL = item.transcriptURL, fileManager.fileExists(atPath: transcriptURL.path) {
+            try fileManager.removeItem(at: transcriptURL)
+        }
+
+        let transcriptJSONURL = transcriptJSONURL(for: item.audioURL)
+        if fileManager.fileExists(atPath: transcriptJSONURL.path) {
+            try fileManager.removeItem(at: transcriptJSONURL)
+        }
+    }
 }

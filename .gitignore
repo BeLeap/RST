@@ -1,0 +1,5 @@
+.DS_Store
+
+# Xcode user-specific state
+RST.xcodeproj/project.xcworkspace/xcuserdata/
+RST.xcodeproj/xcuserdata/

@@ -19,6 +19,7 @@ fi
 
 rm -f "$OUTPUT_DMG"
 cp -R "$APP_BUNDLE" "$STAGING_DIR/"
+ln -s /Applications "$STAGING_DIR/Applications"
 
 hdiutil create \
   -volname "$VOLUME_NAME" \

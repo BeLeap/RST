@@ -36,6 +36,8 @@ direnv allow .
 ./scripts/build-whisper-framework.sh
 ```
 
+You can also use `just build-whisper`, `just build-app`, or `just build`.
+
 3. Open [`RST.xcodeproj`](/Users/beleap/pj/github.com/beleap/RST/RST.xcodeproj/project.pbxproj) in Xcode.
 4. Build and run the `RST` target.
 5. In the sidebar, set:
@@ -48,6 +50,8 @@ direnv allow .
 
 - [`shell.nix`](/Users/beleap/pj/github.com/beleap/RST/shell.nix) provides `cmake`, `ninja`, and `pkg-config`.
 - [`.envrc`](/Users/beleap/pj/github.com/beleap/RST/.envrc) uses `direnv` with `use nix`.
+- [`Justfile`](/Users/beleap/pj/github.com/beleap/RST/Justfile) wraps the common framework and app build commands.
+- [`.github/workflows/build-dmg.yml`](/Users/beleap/pj/github.com/beleap/RST/.github/workflows/build-dmg.yml) builds the Release app and a DMG artifact on macOS runners.
 
 ## Notes
 

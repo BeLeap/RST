@@ -11,6 +11,8 @@
 - Added export actions for the selected recording and transcript.
 - Added a helper build script for the embedded `whisper.cpp` xcframework.
 - Added `shell.nix` and `.envrc` so the build toolchain can be loaded through `direnv` and Nix.
+- Added a `Justfile` with build recipes for the embedded Whisper framework and the Xcode app target.
+- Added a GitHub Actions workflow that builds the Release app on macOS and packages it as a DMG artifact.
 - Added a Whisper model picker that can auto-download preset `.bin` files into `~/Library/Application Support/RST/Models` while still allowing a custom model path.
 - Stored recordings and transcripts in `~/Library/Application Support/RST/Recordings`.
 

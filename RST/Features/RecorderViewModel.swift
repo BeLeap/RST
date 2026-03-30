@@ -179,6 +179,83 @@ final class RecorderViewModel: ObservableObject {
         exportItem(at: transcriptURL, to: destination)
     }
 
+    func deleteSelectedRecording() {
+        guard let recordingID = selectedRecordingID else {
+            statusMessage = "Select a recording first."
+            return
+        }
+
+        deleteRecording(id: recordingID)
+    }
+
+    func deleteRecording(id: RecordingItem.ID) {
+        guard let recording = recordings.first(where: { $0.id == id }) else {
+            statusMessage = "The selected recording could not be found."
+            return
+        }
+
+        do {
+            try store.deleteRecording(recording)
+            try reloadRecordings()
+            selectedRecordingID = recordings.first?.id
+
+            if let next = selectedRecording {
+                try loadTranscript(for: next)
+            } else {
+                selectedTranscript = "No transcript selected."
+            }
+
+            statusMessage = "Deleted \(recording.audioURL.lastPathComponent)"
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
+    func renameRecording(id: RecordingItem.ID) {
+        guard let recording = recordings.first(where: { $0.id == id }) else {
+            statusMessage = "The selected recording could not be found."
+            return
+        }
+
+        let prompt = NSAlert()
+        prompt.messageText = "Rename Recording"
+        prompt.informativeText = "Enter a new file name for this recording."
+        prompt.alertStyle = .informational
+        prompt.addButton(withTitle: "Rename")
+        prompt.addButton(withTitle: "Cancel")
+
+        let inputField = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+        inputField.stringValue = recording.title
+        prompt.accessoryView = inputField
+
+        let response = prompt.runModal()
+        guard response == .alertFirstButtonReturn else {
+            statusMessage = "Rename canceled."
+            return
+        }
+
+        do {
+            let newAudioURL = try store.renameRecording(recording, to: inputField.stringValue)
+            try reloadRecordings()
+            selectedRecordingID = newAudioURL.path
+            if let renamed = selectedRecording {
+                try loadTranscript(for: renamed)
+            }
+            statusMessage = "Renamed recording to \(newAudioURL.lastPathComponent)"
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
+    func renameSelectedRecording() {
+        guard let selectedRecordingID else {
+            statusMessage = "Select a recording first."
+            return
+        }
+
+        renameRecording(id: selectedRecordingID)
+    }
+
     private func transcribe(audioURL: URL, configuration: WhisperConfiguration) async {
         isTranscribing = true
         statusMessage = "Transcribing \(audioURL.lastPathComponent) with embedded Whisper..."

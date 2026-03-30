@@ -78,4 +78,87 @@ struct TranscriptStore {
 
         return try String(contentsOf: transcriptURL, encoding: .utf8)
     }
+
+    func deleteRecording(_ item: RecordingItem) throws {
+        if fileManager.fileExists(atPath: item.audioURL.path) {
+            try fileManager.removeItem(at: item.audioURL)
+        }
+
+        if let transcriptURL = item.transcriptURL, fileManager.fileExists(atPath: transcriptURL.path) {
+            try fileManager.removeItem(at: transcriptURL)
+        }
+
+        let transcriptJSONURL = transcriptJSONURL(for: item.audioURL)
+        if fileManager.fileExists(atPath: transcriptJSONURL.path) {
+            try fileManager.removeItem(at: transcriptJSONURL)
+        }
+    }
+
+    func renameRecording(_ item: RecordingItem, to newTitle: String) throws -> URL {
+        let sanitizedTitle = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sanitizedTitle.isEmpty else {
+            throw NSError(
+                domain: "TranscriptStore",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Recording name cannot be empty."]
+            )
+        }
+
+        guard !sanitizedTitle.contains("/") else {
+            throw NSError(
+                domain: "TranscriptStore",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Recording name cannot contain '/'. Use a plain file name."]
+            )
+        }
+
+        let oldAudioURL = item.audioURL
+        let newAudioURL = oldAudioURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(sanitizedTitle)
+            .appendingPathExtension(oldAudioURL.pathExtension)
+
+        guard oldAudioURL != newAudioURL else {
+            return oldAudioURL
+        }
+
+        guard !fileManager.fileExists(atPath: newAudioURL.path) else {
+            throw NSError(
+                domain: "TranscriptStore",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "A recording with that name already exists."]
+            )
+        }
+
+        let oldTranscriptURL = transcriptURL(for: oldAudioURL)
+        let oldTranscriptJSONURL = transcriptJSONURL(for: oldAudioURL)
+        let newTranscriptURL = transcriptURL(for: newAudioURL)
+        let newTranscriptJSONURL = transcriptJSONURL(for: newAudioURL)
+
+        try fileManager.moveItem(at: oldAudioURL, to: newAudioURL)
+
+        do {
+            if fileManager.fileExists(atPath: oldTranscriptURL.path) {
+                try fileManager.moveItem(at: oldTranscriptURL, to: newTranscriptURL)
+            }
+            if fileManager.fileExists(atPath: oldTranscriptJSONURL.path) {
+                try fileManager.moveItem(at: oldTranscriptJSONURL, to: newTranscriptJSONURL)
+            }
+            return newAudioURL
+        } catch {
+            var rollbackMessage = ""
+            if fileManager.fileExists(atPath: newAudioURL.path) {
+                do {
+                    try fileManager.moveItem(at: newAudioURL, to: oldAudioURL)
+                } catch {
+                    rollbackMessage = " Rollback failed: \(error.localizedDescription)"
+                }
+            }
+            throw NSError(
+                domain: "TranscriptStore",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to rename transcript files: \(error.localizedDescription).\(rollbackMessage)"]
+            )
+        }
+    }
 }

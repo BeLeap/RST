@@ -28,8 +28,10 @@ final class AudioRecorderService: NSObject {
 
     func requestPermission() async throws {
         let granted = await withCheckedContinuation { continuation in
-            AVCaptureDevice.requestAccess(for: .audio) { allowed in
-                continuation.resume(returning: allowed)
+            AVCaptureDevice.requestAccess(for: .audio) { @Sendable allowed in
+                Task { @MainActor in
+                    continuation.resume(returning: allowed)
+                }
             }
         }
 

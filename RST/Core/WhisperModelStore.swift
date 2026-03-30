@@ -224,23 +224,11 @@ final class WhisperModelStore: ObservableObject {
 
     private func downloadFile(from sourceURL: URL, onProgress: @escaping (Double?) -> Void) async throws -> URL {
         let urlSession = URLSession(configuration: urlSessionConfiguration)
-        let task = urlSession.downloadTask(with: sourceURL)
-
-        let progressObservation = task.progress.observe(\.fractionCompleted, options: [.new, .initial]) { progress, _ in
-            if progress.totalUnitCount > 0 {
-                onProgress(progress.fractionCompleted)
-            } else {
-                onProgress(nil)
-            }
-        }
-
         defer {
-            progressObservation.invalidate()
             urlSession.invalidateAndCancel()
         }
 
-        task.resume()
-        let (localURL, response) = try await task.value
+        let (bytes, response) = try await urlSession.bytes(from: sourceURL)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw DownloadError.invalidResponse
@@ -250,13 +238,60 @@ final class WhisperModelStore: ObservableObject {
             throw DownloadError.invalidStatusCode(httpResponse.statusCode)
         }
 
-        return localURL
+        let expectedContentLength = httpResponse.expectedContentLength
+        let temporaryFileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: false)
+            .appendingPathExtension("download")
+        guard FileManager.default.createFile(atPath: temporaryFileURL.path, contents: nil) else {
+            throw DownloadError.unableToCreateTemporaryFile(temporaryFileURL.path)
+        }
+
+        let fileHandle = try FileHandle(forWritingTo: temporaryFileURL)
+        var writeBuffer = Data()
+        writeBuffer.reserveCapacity(64 * 1024)
+        var downloadedBytes: Int64 = 0
+
+        do {
+            for try await byte in bytes {
+                writeBuffer.append(byte)
+                downloadedBytes += 1
+
+                if writeBuffer.count >= 64 * 1024 {
+                    try fileHandle.write(contentsOf: writeBuffer)
+                    writeBuffer.removeAll(keepingCapacity: true)
+                }
+
+                if expectedContentLength > 0, downloadedBytes % Int64(256 * 1024) == 0 {
+                    onProgress(Double(downloadedBytes) / Double(expectedContentLength))
+                }
+            }
+
+            if !writeBuffer.isEmpty {
+                try fileHandle.write(contentsOf: writeBuffer)
+            }
+            try fileHandle.close()
+        } catch {
+            try? fileHandle.close()
+            if FileManager.default.fileExists(atPath: temporaryFileURL.path) {
+                try? FileManager.default.removeItem(at: temporaryFileURL)
+            }
+            throw error
+        }
+
+        if expectedContentLength > 0 {
+            onProgress(1)
+        } else {
+            onProgress(nil)
+        }
+
+        return temporaryFileURL
     }
 }
 
 private enum DownloadError: LocalizedError {
     case invalidResponse
     case invalidStatusCode(Int)
+    case unableToCreateTemporaryFile(String)
 
     var errorDescription: String? {
         switch self {
@@ -264,6 +299,8 @@ private enum DownloadError: LocalizedError {
             return "Model download returned an invalid response."
         case .invalidStatusCode(let statusCode):
             return "Model download failed with status code \(statusCode)."
+        case .unableToCreateTemporaryFile(let filePath):
+            return "Model download could not create a temporary file at \(filePath)."
         }
     }
 }

@@ -10,14 +10,15 @@
 - Added periodic live transcription during recording by repeatedly transcribing the in-progress WAV file.
 - Added export actions for the selected recording and transcript.
 - Added a helper build script for the embedded `whisper.cpp` xcframework.
+- Added `shell.nix` and `.envrc` so the build toolchain can be loaded through `direnv` and Nix.
+- Added a Whisper model picker that can auto-download preset `.bin` files into `~/Library/Application Support/RST/Models` while still allowing a custom model path.
 - Stored recordings and transcripts in `~/Library/Application Support/RST/Recordings`.
 
 ## Constraints
 
-- The environment only has Command Line Tools active, so `xcodebuild` is not available here.
-- Full Xcode is still not active in this environment, so `build-xcframework.sh` could not be validated here.
+- Xcode is now active in the environment.
 - Local Whisper model files were not installed in this environment.
-- Because of that, runtime verification could only cover source changes and static review, not a full app build or end-to-end transcription run.
+- Runtime verification still depends on entering the Nix shell so `cmake` is available for `whisper.cpp` framework generation.
 
 ## Relevant files
 

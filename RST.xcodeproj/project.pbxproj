@@ -18,6 +18,7 @@
 		A1000000000000000000000C /* WaveDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000024 /* WaveDecoder.swift */; };
 		A1000000000000000000000D /* whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* whisper.xcframework */; };
 		A1000000000000000000000E /* whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A1000000000000000000000F /* WhisperModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* WhisperModelStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -50,6 +51,7 @@
 		A10000000000000000000023 /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
 		A10000000000000000000024 /* WaveDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveDecoder.swift; sourceTree = "<group>"; };
 		A10000000000000000000025 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = Vendor/whisper.cpp/build-apple/whisper.xcframework; sourceTree = SOURCE_ROOT; };
+		A10000000000000000000026 /* WhisperModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModelStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -132,6 +134,7 @@
 				A10000000000000000000017 /* RecordingItem.swift */,
 				A10000000000000000000018 /* PanelPicker.swift */,
 				A10000000000000000000024 /* WaveDecoder.swift */,
+				A10000000000000000000026 /* WhisperModelStore.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -214,6 +217,7 @@
 				A10000000000000000000007 /* RecordingItem.swift in Sources */,
 				A10000000000000000000008 /* PanelPicker.swift in Sources */,
 				A1000000000000000000000C /* WaveDecoder.swift in Sources */,
+				A1000000000000000000000F /* WhisperModelStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

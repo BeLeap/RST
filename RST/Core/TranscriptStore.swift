@@ -16,8 +16,16 @@ struct TranscriptStore {
         appSupportDirectory.appendingPathComponent("Recordings", isDirectory: true)
     }
 
+    var modelsDirectory: URL {
+        appSupportDirectory.appendingPathComponent("Models", isDirectory: true)
+    }
+
     func ensureDirectories() throws {
         try fileManager.createDirectory(at: recordingsDirectory, withIntermediateDirectories: true)
+    }
+
+    func ensureModelDirectory() throws {
+        try fileManager.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
     }
 
     func nextRecordingURL(now: Date = .now) throws -> URL {

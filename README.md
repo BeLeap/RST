@@ -7,6 +7,7 @@
 - Records microphone input into `.wav` files under `~/Library/Application Support/RST/Recordings`
 - Runs embedded `whisper.cpp` against those recordings while recording and again on the final file
 - Saves transcript files next to the audio as `*-transcript.txt`
+- Lets you choose a Whisper model preset and auto-download it into `~/Library/Application Support/RST/Models`
 - Exports the selected audio file or transcript to a user-chosen destination
 - Lets you reveal the saved audio and transcript in Finder
 
@@ -19,23 +20,34 @@
 
 ## Requirements
 
-You need a local Whisper model file in `.bin` format. The app links `whisper.cpp` as a framework, so there is no separate `whisper-cli` runtime dependency.
+The app links `whisper.cpp` as a framework, so there is no separate `whisper-cli` runtime dependency. You can either select a preset model and let the app download it locally, or point the app at an existing `.bin` file.
 
 ## Running
 
-1. Open [`RST.xcodeproj`](/Users/beleap/pj/github.com/beleap/RST/RST.xcodeproj/project.pbxproj) in Xcode.
-2. Build and run the `RST` target.
-3. Build the vendored `whisper.cpp` xcframework once:
+1. Allow `direnv` to load the local Nix shell:
+
+```bash
+direnv allow .
+```
+
+2. Build the vendored `whisper.cpp` xcframework once:
 
 ```bash
 ./scripts/build-whisper-framework.sh
 ```
 
-4. In the sidebar, set:
-   - the full path to your `.bin` model
+3. Open [`RST.xcodeproj`](/Users/beleap/pj/github.com/beleap/RST/RST.xcodeproj/project.pbxproj) in Xcode.
+4. Build and run the `RST` target.
+5. In the sidebar, set:
+   - a Whisper preset to auto-download, or a full path to your own `.bin` model
    - the transcription language, or `auto`
-5. Start recording. The transcript view updates periodically while audio is still being captured.
-6. Stop recording for a final pass, or export the selected `.wav` / `.txt` files from the sidebar.
+6. Start recording. The transcript view updates periodically while audio is still being captured.
+7. Stop recording for a final pass, or export the selected `.wav` / `.txt` files from the sidebar.
+
+## Development Environment
+
+- [`shell.nix`](/Users/beleap/pj/github.com/beleap/RST/shell.nix) provides `cmake`, `ninja`, and `pkg-config`.
+- [`.envrc`](/Users/beleap/pj/github.com/beleap/RST/.envrc) uses `direnv` with `use nix`.
 
 ## Notes
 

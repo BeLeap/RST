@@ -2,7 +2,9 @@ import SwiftUI
 
 struct RecorderView: View {
     @ObservedObject var viewModel: RecorderViewModel
+    @StateObject private var modelStore = WhisperModelStore()
 
+    @AppStorage("whisperModelSelection") private var whisperModelSelection = WhisperModelPreset.customID
     @AppStorage("whisperModelPath") private var whisperModelPath = ""
     @AppStorage("whisperLanguage") private var whisperLanguage = "auto"
 
@@ -13,6 +15,9 @@ struct RecorderView: View {
             detail
         }
         .navigationSplitViewStyle(.balanced)
+        .task(id: whisperModelSelection) {
+            await modelStore.prepareSelection(whisperModelSelection)
+        }
     }
 
     private var sidebar: some View {
@@ -21,11 +26,51 @@ struct RecorderView: View {
                 Text("Local Whisper")
                     .font(.title2.bold())
 
-                pathField(title: "Model (.bin)", text: $whisperModelPath, browseAction: {
-                    if let url = PanelPicker.chooseFile(title: "Choose Whisper model", allowedFileTypes: ["bin"]) {
-                        whisperModelPath = url.path
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Model")
+                        .font(.headline)
+
+                    Picker("Model", selection: $whisperModelSelection) {
+                        Text("Custom Path").tag(WhisperModelPreset.customID)
+                        ForEach(WhisperModelPreset.catalog) { preset in
+                            Text("\(preset.name) (\(preset.sizeDescription))").tag(preset.id)
+                        }
                     }
-                })
+                    .pickerStyle(.menu)
+
+                    if let preset = WhisperModelPreset.preset(id: whisperModelSelection) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(modelStore.localPath(for: preset))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+
+                            HStack(spacing: 8) {
+                                Button(modelStore.isDownloaded(preset) ? "Redownload" : "Download") {
+                                    Task {
+                                        await modelStore.redownloadSelectedModel(whisperModelSelection)
+                                    }
+                                }
+                                .disabled(modelStore.activeDownloadID != nil)
+
+                                Button("Open Models Folder") {
+                                    modelStore.openModelsFolder()
+                                }
+
+                                if modelStore.activeDownloadID == preset.id {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+                            }
+                        }
+                    } else {
+                        pathField(title: "Model (.bin)", text: $whisperModelPath, browseAction: {
+                            if let url = PanelPicker.chooseFile(title: "Choose Whisper model", allowedFileTypes: ["bin"]) {
+                                whisperModelPath = url.path
+                            }
+                        })
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Language")
@@ -33,6 +78,11 @@ struct RecorderView: View {
                     TextField("auto", text: $whisperLanguage)
                         .textFieldStyle(.roundedBorder)
                 }
+
+                Text(modelStore.selectionSummary(selectedModelID: whisperModelSelection, customModelPath: whisperModelPath))
+                    .font(.footnote)
+                    .foregroundStyle(modelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text("The app records WAV files locally and transcribes them with embedded Whisper. No external API is used.")
                     .font(.footnote)
@@ -180,7 +230,10 @@ struct RecorderView: View {
 
     private var whisperConfiguration: WhisperConfiguration {
         WhisperConfiguration(
-            modelPath: whisperModelPath.trimmingCharacters(in: .whitespacesAndNewlines),
+            modelPath: modelStore.resolveModelPath(
+                selectedModelID: whisperModelSelection,
+                customModelPath: whisperModelPath
+            ),
             language: whisperLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }

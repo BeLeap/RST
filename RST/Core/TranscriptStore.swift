@@ -20,6 +20,10 @@ struct TranscriptStore {
         appSupportDirectory.appendingPathComponent("Models", isDirectory: true)
     }
 
+    var batchQueueURL: URL {
+        appSupportDirectory.appendingPathComponent("batch-transcription-queue.json", isDirectory: false)
+    }
+
     func ensureDirectories() throws {
         try fileManager.createDirectory(at: recordingsDirectory, withIntermediateDirectories: true)
     }
@@ -46,6 +50,24 @@ struct TranscriptStore {
     func transcriptJSONURL(for audioURL: URL) -> URL {
         let stem = audioURL.deletingPathExtension().lastPathComponent
         return audioURL.deletingLastPathComponent().appendingPathComponent("\(stem)-transcript.json")
+    }
+
+    func loadBatchQueue() throws -> [BatchTranscriptionJob] {
+        try ensureDirectories()
+
+        guard fileManager.fileExists(atPath: batchQueueURL.path) else {
+            return []
+        }
+
+        let data = try Data(contentsOf: batchQueueURL)
+        return try JSONDecoder().decode([BatchTranscriptionJob].self, from: data)
+    }
+
+    func saveBatchQueue(_ jobs: [BatchTranscriptionJob]) throws {
+        try ensureDirectories()
+
+        let data = try JSONEncoder().encode(jobs)
+        try data.write(to: batchQueueURL, options: .atomic)
     }
 
     func loadRecordings() throws -> [RecordingItem] {
@@ -91,6 +113,12 @@ struct TranscriptStore {
         let transcriptJSONURL = transcriptJSONURL(for: item.audioURL)
         if fileManager.fileExists(atPath: transcriptJSONURL.path) {
             try fileManager.removeItem(at: transcriptJSONURL)
+        }
+
+        let queue = try loadBatchQueue()
+        let filteredQueue = queue.filter { $0.audioPath != item.audioURL.path }
+        if filteredQueue.count != queue.count {
+            try saveBatchQueue(filteredQueue)
         }
     }
 
@@ -144,6 +172,7 @@ struct TranscriptStore {
             if fileManager.fileExists(atPath: oldTranscriptJSONURL.path) {
                 try fileManager.moveItem(at: oldTranscriptJSONURL, to: newTranscriptJSONURL)
             }
+            try updateBatchQueueAudioURL(from: oldAudioURL, to: newAudioURL)
             return newAudioURL
         } catch {
             var rollbackMessage = ""
@@ -161,4 +190,29 @@ struct TranscriptStore {
             )
         }
     }
+
+    private func updateBatchQueueAudioURL(from oldAudioURL: URL, to newAudioURL: URL) throws {
+        let queue = try loadBatchQueue()
+        let updatedQueue = queue.map { job in
+            guard job.audioPath == oldAudioURL.path else {
+                return job
+            }
+            return BatchTranscriptionJob(
+                id: job.id,
+                audioPath: newAudioURL.path,
+                modelPath: job.modelPath,
+                language: job.language,
+                enqueuedAt: job.enqueuedAt
+            )
+        }
+        try saveBatchQueue(updatedQueue)
+    }
+}
+
+struct BatchTranscriptionJob: Codable, Equatable {
+    let id: UUID
+    let audioPath: String
+    let modelPath: String
+    let language: String
+    let enqueuedAt: Date
 }

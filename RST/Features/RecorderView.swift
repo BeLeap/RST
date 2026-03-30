@@ -240,6 +240,11 @@ struct RecorderView: View {
                             Text(item.createdAt.formatted(date: .abbreviated, time: .standard))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            if let batchQueueLabel = viewModel.batchQueueLabel(for: item.id) {
+                                Text(batchQueueLabel)
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
                         }
                         .contentShape(Rectangle())
                         .contextMenu {

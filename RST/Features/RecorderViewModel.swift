@@ -11,6 +11,8 @@ final class RecorderViewModel: ObservableObject {
     @Published private(set) var isRecording = false
     @Published private(set) var isTranscribing = false
     @Published private(set) var statusMessage = "Ready."
+    @Published private(set) var processingBatchAudioPath: String?
+    @Published private(set) var queuedBatchPositions: [String: Int] = [:]
 
     private let store: TranscriptStore
     private let recorder: AudioRecorderService
@@ -19,6 +21,8 @@ final class RecorderViewModel: ObservableObject {
     private var liveSession: WhisperTranscriptionSession?
     private var liveUpdateTimer: Timer?
     private var liveUpdateTask: Task<Void, Never>?
+    private var batchQueue: [BatchTranscriptionJob] = []
+    private var batchProcessingTask: Task<Void, Never>?
 
     init(
         store: TranscriptStore = TranscriptStore(),
@@ -31,10 +35,13 @@ final class RecorderViewModel: ObservableObject {
 
         do {
             try reloadRecordings()
+            batchQueue = try store.loadBatchQueue()
+            syncBatchQueueUIState()
             if let first = recordings.first {
                 selectedRecordingID = first.id
                 try loadTranscript(for: first)
             }
+            resumeBatchProcessingIfNeeded()
         } catch {
             statusMessage = error.localizedDescription
         }
@@ -100,8 +107,16 @@ final class RecorderViewModel: ObservableObject {
                 try loadTranscript(for: item)
             }
             liveSession = nil
-            statusMessage = "Saved recording \(url.lastPathComponent). Starting final transcription..."
-            await transcribe(audioURL: url, configuration: finalConfiguration)
+            let enqueuedJob = BatchTranscriptionJob(
+                id: UUID(),
+                audioPath: url.path,
+                modelPath: finalConfiguration.modelPath,
+                language: finalConfiguration.language,
+                enqueuedAt: .now
+            )
+            try enqueueBatchJob(enqueuedJob)
+            statusMessage = "Saved recording \(url.lastPathComponent). Final transcription queued in background."
+            resumeBatchProcessingIfNeeded()
         } catch {
             statusMessage = error.localizedDescription
         }
@@ -199,6 +214,8 @@ final class RecorderViewModel: ObservableObject {
         do {
             try store.deleteRecording(recording)
             try reloadRecordings()
+            batchQueue = try store.loadBatchQueue()
+            syncBatchQueueUIState()
             selectedRecordingID = recordings.first?.id
 
             if let next = selectedRecording {
@@ -239,6 +256,8 @@ final class RecorderViewModel: ObservableObject {
         do {
             let newAudioURL = try store.renameRecording(recording, to: inputField.stringValue)
             try reloadRecordings()
+            batchQueue = try store.loadBatchQueue()
+            syncBatchQueueUIState()
             selectedRecordingID = newAudioURL.path
             if let renamed = selectedRecording {
                 try loadTranscript(for: renamed)
@@ -273,6 +292,85 @@ final class RecorderViewModel: ObservableObject {
         }
 
         isTranscribing = false
+    }
+
+    private func enqueueBatchJob(_ job: BatchTranscriptionJob) throws {
+        batchQueue.append(job)
+        try store.saveBatchQueue(batchQueue)
+        syncBatchQueueUIState()
+    }
+
+    private func resumeBatchProcessingIfNeeded() {
+        guard batchProcessingTask == nil, !batchQueue.isEmpty else {
+            return
+        }
+
+        batchProcessingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.processBatchQueue()
+            self.batchProcessingTask = nil
+        }
+    }
+
+    private func processBatchQueue() async {
+        while let job = batchQueue.first {
+            isTranscribing = true
+            let audioURL = URL(fileURLWithPath: job.audioPath)
+            processingBatchAudioPath = audioURL.path
+            syncBatchQueueUIState()
+            statusMessage = "Processing queued final transcription for \(audioURL.lastPathComponent)..."
+
+            do {
+                let result = try transcriber.transcribe(
+                    audioURL: audioURL,
+                    configuration: WhisperConfiguration(modelPath: job.modelPath, language: job.language)
+                )
+                batchQueue.removeFirst()
+                try store.saveBatchQueue(batchQueue)
+                processingBatchAudioPath = nil
+                syncBatchQueueUIState()
+                try reloadRecordings()
+                selectedRecordingID = audioURL.path
+                selectedTranscript = result.transcriptText
+                statusMessage = "Transcript saved to \(result.transcriptURL.lastPathComponent)"
+            } catch {
+                processingBatchAudioPath = nil
+                syncBatchQueueUIState()
+                statusMessage = "Queued transcription failed for \(audioURL.lastPathComponent): \(error.localizedDescription). The job remains queued and will retry when the app starts again."
+                break
+            }
+        }
+
+        processingBatchAudioPath = nil
+        syncBatchQueueUIState()
+        isTranscribing = false
+    }
+
+    func batchQueueLabel(for recordingID: RecordingItem.ID) -> String? {
+        if processingBatchAudioPath == recordingID {
+            return "Batch processing in progress"
+        }
+
+        guard let position = queuedBatchPositions[recordingID] else {
+            return nil
+        }
+
+        return "Queued for batch transcription (\(position))"
+    }
+
+    private func syncBatchQueueUIState() {
+        var positions: [String: Int] = [:]
+        var queueIndex = 1
+
+        for job in batchQueue {
+            if job.audioPath == processingBatchAudioPath {
+                continue
+            }
+            positions[job.audioPath] = queueIndex
+            queueIndex += 1
+        }
+
+        queuedBatchPositions = positions
     }
 
     private func loadTranscript(for item: RecordingItem) throws {

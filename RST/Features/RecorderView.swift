@@ -144,7 +144,7 @@ struct RecorderView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .frame(minHeight: 260)
+                .frame(minHeight: 120, idealHeight: 220)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Button("Transcribe Selected") {

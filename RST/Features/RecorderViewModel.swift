@@ -3,6 +3,8 @@ import Foundation
 
 @MainActor
 final class RecorderViewModel: ObservableObject {
+    private static let liveUpdateInterval: TimeInterval = 2.5
+
     @Published private(set) var recordings: [RecordingItem] = []
     @Published var selectedRecordingID: RecordingItem.ID?
     @Published private(set) var selectedTranscript = "No transcript selected."
@@ -279,7 +281,7 @@ final class RecorderViewModel: ObservableObject {
 
     private func scheduleLiveUpdates() {
         liveUpdateTimer?.invalidate()
-        liveUpdateTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: true) { [weak self] _ in
+        liveUpdateTimer = Timer.scheduledTimer(withTimeInterval: Self.liveUpdateInterval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.liveUpdateTask?.cancel()
@@ -302,7 +304,7 @@ final class RecorderViewModel: ObservableObject {
         isTranscribing = true
 
         do {
-            let result = try liveSession.transcribe(audioURL: activeRecordingURL)
+            let result = try liveSession.transcribeLive(audioURL: activeRecordingURL, finalPass: finalPass)
             selectedTranscript = result.transcriptText.isEmpty ? "Listening..." : result.transcriptText
             if finalPass {
                 try reloadRecordings()

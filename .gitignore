@@ -3,3 +3,6 @@
 # Xcode user-specific state
 RST.xcodeproj/project.xcworkspace/xcuserdata/
 RST.xcodeproj/xcuserdata/
+
+# Local build output
+.build/

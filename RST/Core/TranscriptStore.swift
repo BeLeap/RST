@@ -20,12 +20,33 @@ struct TranscriptStore {
         appSupportDirectory.appendingPathComponent("Models", isDirectory: true)
     }
 
+    var transcriptionQueueURL: URL {
+        appSupportDirectory.appendingPathComponent("transcription-queue.json", isDirectory: false)
+    }
+
     func ensureDirectories() throws {
         try fileManager.createDirectory(at: recordingsDirectory, withIntermediateDirectories: true)
     }
 
     func ensureModelDirectory() throws {
         try fileManager.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
+    }
+
+    func loadTranscriptionQueue() throws -> [TranscriptionJob] {
+        try ensureDirectories()
+
+        guard fileManager.fileExists(atPath: transcriptionQueueURL.path) else {
+            return []
+        }
+
+        let data = try Data(contentsOf: transcriptionQueueURL)
+        return try JSONDecoder().decode([TranscriptionJob].self, from: data)
+    }
+
+    func saveTranscriptionQueue(_ queue: [TranscriptionJob]) throws {
+        try ensureDirectories()
+        let data = try JSONEncoder().encode(queue)
+        try data.write(to: transcriptionQueueURL, options: .atomic)
     }
 
     func nextRecordingURL(now: Date = .now) throws -> URL {

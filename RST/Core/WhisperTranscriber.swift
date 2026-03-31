@@ -21,12 +21,12 @@ enum WhisperTranscriptionError: LocalizedError {
     }
 }
 
-struct WhisperConfiguration {
+struct WhisperConfiguration: Sendable {
     let modelPath: String
     let language: String
 }
 
-struct TranscriptionResult {
+struct TranscriptionResult: Sendable {
     let transcriptURL: URL
     let transcriptText: String
 }

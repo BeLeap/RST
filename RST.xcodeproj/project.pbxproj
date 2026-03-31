@@ -19,6 +19,7 @@
 		A1000000000000000000000D /* whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* whisper.xcframework */; };
 		A1000000000000000000000E /* whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A1000000000000000000000F /* WhisperModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* WhisperModelStore.swift */; };
+		A10000000000000000000029 /* TranscriptionQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* TranscriptionQueue.swift */; };
 		A10000000000000000000027 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -53,6 +54,7 @@
 		A10000000000000000000024 /* WaveDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveDecoder.swift; sourceTree = "<group>"; };
 		A10000000000000000000025 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = Vendor/whisper.cpp/build-apple/whisper.xcframework; sourceTree = SOURCE_ROOT; };
 		A10000000000000000000026 /* WhisperModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModelStore.swift; sourceTree = "<group>"; };
+		A1000000000000000000002A /* TranscriptionQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionQueue.swift; sourceTree = "<group>"; };
 		A10000000000000000000028 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -138,6 +140,7 @@
 				A10000000000000000000018 /* PanelPicker.swift */,
 				A10000000000000000000024 /* WaveDecoder.swift */,
 				A10000000000000000000026 /* WhisperModelStore.swift */,
+				A1000000000000000000002A /* TranscriptionQueue.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -222,6 +225,7 @@
 				A10000000000000000000008 /* PanelPicker.swift in Sources */,
 				A1000000000000000000000C /* WaveDecoder.swift in Sources */,
 				A1000000000000000000000F /* WhisperModelStore.swift in Sources */,
+				A10000000000000000000029 /* TranscriptionQueue.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

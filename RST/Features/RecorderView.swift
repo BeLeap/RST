@@ -221,8 +221,16 @@ struct RecorderView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Files")
-                        .font(.title3.bold())
+                    HStack {
+                        Text("Files")
+                            .font(.title3.bold())
+                        Spacer()
+                        if viewModel.queuedJobCount > 0 {
+                            Text("Queue: \(viewModel.queuedJobCount)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
 
                     ZStack {
                         List(viewModel.recordings, selection: Binding(
@@ -235,6 +243,10 @@ struct RecorderView: View {
                                 Text(item.createdAt.formatted(date: .abbreviated, time: .standard))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                Text(viewModel.transcriptionStatusText(for: item))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
                             }
                             .contentShape(Rectangle())
                             .contextMenu {
@@ -256,7 +268,7 @@ struct RecorderView: View {
                                         await viewModel.transcribeSelected(configuration: batchWhisperConfiguration)
                                     }
                                 }
-                                .disabled(viewModel.isRecording || viewModel.isTranscribing)
+                                .disabled(viewModel.isRecording)
 
                                 Button("Reveal Audio") {
                                     viewModel.selectRecording(id: item.id)

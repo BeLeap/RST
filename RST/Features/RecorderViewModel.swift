@@ -12,6 +12,8 @@ final class RecorderViewModel: ObservableObject {
     @Published private(set) var isRecording = false
     @Published private(set) var isTranscribing = false
     @Published private(set) var statusMessage = "Ready."
+    @Published private(set) var queuedJobCount = 0
+    @Published private(set) var runningJobID: UUID?
 
     private let store: TranscriptStore
     private let recorder: AudioRecorderService
@@ -20,6 +22,8 @@ final class RecorderViewModel: ObservableObject {
     private var liveSession: WhisperTranscriptionSession?
     private var liveUpdateTimer: Timer?
     private var liveUpdateTask: Task<Void, Never>?
+    private var queueWorkerTask: Task<Void, Never>?
+    private var transcriptionQueue: [TranscriptionJob] = []
 
     init(
         store: TranscriptStore = TranscriptStore(),
@@ -32,6 +36,8 @@ final class RecorderViewModel: ObservableObject {
 
         do {
             try reloadRecordings()
+            try loadTranscriptionQueue()
+            startQueueWorkerIfNeeded()
             if let first = recordings.first {
                 selectedRecordingID = first.id
                 try loadTranscript(for: first)
@@ -43,6 +49,27 @@ final class RecorderViewModel: ObservableObject {
 
     var selectedRecording: RecordingItem? {
         recordings.first { $0.id == selectedRecordingID }
+    }
+
+    func transcriptionStatusText(for item: RecordingItem) -> String {
+        guard let job = latestJob(for: item.audioURL.path) else {
+            return item.transcriptURL == nil ? "Not transcribed" : "Transcribed"
+        }
+
+        switch job.status {
+        case .queued:
+            return "Queued"
+        case .running:
+            return "Transcribing..."
+        case .completed:
+            return "Transcribed"
+        case .failed:
+            let message = job.errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let message, !message.isEmpty {
+                return "Failed: \(message)"
+            }
+            return "Failed"
+        }
     }
 
     func reloadRecordings() throws {
@@ -101,8 +128,8 @@ final class RecorderViewModel: ObservableObject {
                 try loadTranscript(for: item)
             }
             liveSession = nil
-            statusMessage = "Saved recording \(url.lastPathComponent). Starting final transcription..."
-            await transcribe(audioURL: url, configuration: finalConfiguration)
+            try enqueueTranscription(audioURL: url, configuration: finalConfiguration)
+            statusMessage = "Saved recording \(url.lastPathComponent). Added final transcription to queue."
         } catch {
             statusMessage = error.localizedDescription
         }
@@ -114,7 +141,12 @@ final class RecorderViewModel: ObservableObject {
             return
         }
 
-        await transcribe(audioURL: item.audioURL, configuration: configuration)
+        do {
+            try enqueueTranscription(audioURL: item.audioURL, configuration: configuration)
+            statusMessage = "Queued transcription for \(item.audioURL.lastPathComponent)"
+        } catch {
+            statusMessage = error.localizedDescription
+        }
     }
 
     func revealAudio() {
@@ -190,6 +222,7 @@ final class RecorderViewModel: ObservableObject {
 
         do {
             try store.deleteRecording(recording)
+            removeQueueJobs(forAudioPath: recording.audioURL.path)
             try reloadRecordings()
             selectedRecordingID = recordings.first?.id
 
@@ -230,6 +263,7 @@ final class RecorderViewModel: ObservableObject {
 
         do {
             let newAudioURL = try store.renameRecording(recording, to: inputField.stringValue)
+            try rebindQueueJobs(fromAudioPath: recording.audioURL.path, toAudioPath: newAudioURL.path)
             try reloadRecordings()
             selectedRecordingID = newAudioURL.path
             if let renamed = selectedRecording {
@@ -363,21 +397,160 @@ final class RecorderViewModel: ObservableObject {
         }
     }
 
-    private func transcribe(audioURL: URL, configuration: WhisperConfiguration) async {
-        isTranscribing = true
-        statusMessage = "Transcribing \(audioURL.lastPathComponent) with embedded Whisper..."
+    private func loadTranscriptionQueue() throws {
+        transcriptionQueue = try store.loadTranscriptionQueue().map { job in
+            var normalized = job
+            if normalized.status == .running {
+                normalized.status = .queued
+                normalized.updatedAt = .now
+                normalized.errorMessage = nil
+            }
+            return normalized
+        }
+        try store.saveTranscriptionQueue(transcriptionQueue)
+        recalculateQueueState()
+    }
 
-        do {
-            let result = try transcriber.transcribe(audioURL: audioURL, configuration: configuration)
-            try reloadRecordings()
-            selectedRecordingID = audioURL.path
-            selectedTranscript = result.transcriptText
-            statusMessage = "Transcript saved to \(result.transcriptURL.lastPathComponent)"
-        } catch {
-            statusMessage = error.localizedDescription
+    private func enqueueTranscription(audioURL: URL, configuration: WhisperConfiguration) throws {
+        let modelPath = configuration.modelPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !modelPath.isEmpty else {
+            throw WhisperTranscriptionError.invalidModelPath("(empty)")
         }
 
-        isTranscribing = false
+        let language = configuration.language.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedLanguage = language.isEmpty ? "auto" : language
+
+        if let existing = latestJob(for: audioURL.path), existing.status == .queued || existing.status == .running {
+            throw NSError(
+                domain: "RecorderViewModel",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Transcription is already queued for \(audioURL.lastPathComponent)."]
+            )
+        }
+
+        let job = TranscriptionJob(
+            audioPath: audioURL.path,
+            modelPath: modelPath,
+            language: normalizedLanguage
+        )
+        transcriptionQueue.append(job)
+        try persistQueue()
+        recalculateQueueState()
+        startQueueWorkerIfNeeded()
+    }
+
+    private func startQueueWorkerIfNeeded() {
+        guard queueWorkerTask == nil else {
+            return
+        }
+
+        queueWorkerTask = Task { @MainActor [weak self] in
+            await self?.runTranscriptionQueue()
+        }
+    }
+
+    private func runTranscriptionQueue() async {
+        while true {
+            guard let nextJob = nextQueuedJob() else {
+                queueWorkerTask = nil
+                recalculateQueueState()
+                return
+            }
+
+            do {
+                try markJobStatus(nextJob.id, status: .running, errorMessage: nil)
+                isTranscribing = true
+                statusMessage = "Transcribing \(URL(fileURLWithPath: nextJob.audioPath).lastPathComponent)..."
+
+                let result = try await transcribeInBackground(
+                    audioURL: URL(fileURLWithPath: nextJob.audioPath),
+                    configuration: WhisperConfiguration(modelPath: nextJob.modelPath, language: nextJob.language)
+                )
+
+                try markJobStatus(nextJob.id, status: .completed, errorMessage: nil)
+                try reloadRecordings()
+                if selectedRecordingID == nextJob.audioPath {
+                    selectedTranscript = result.transcriptText
+                }
+                statusMessage = "Transcript saved to \(result.transcriptURL.lastPathComponent)"
+            } catch {
+                do {
+                    try markJobStatus(nextJob.id, status: .failed, errorMessage: error.localizedDescription)
+                } catch {
+                    statusMessage = "Queue persistence failed: \(error.localizedDescription)"
+                }
+                statusMessage = "Transcription failed for \(URL(fileURLWithPath: nextJob.audioPath).lastPathComponent): \(error.localizedDescription)"
+            }
+
+            isTranscribing = false
+        }
+    }
+
+    private func markJobStatus(_ id: UUID, status: TranscriptionJobStatus, errorMessage: String?) throws {
+        guard let index = transcriptionQueue.firstIndex(where: { $0.id == id }) else {
+            throw NSError(
+                domain: "RecorderViewModel",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Queue job \(id.uuidString) was not found."]
+            )
+        }
+
+        transcriptionQueue[index].status = status
+        transcriptionQueue[index].errorMessage = errorMessage
+        transcriptionQueue[index].updatedAt = .now
+        try persistQueue()
+        recalculateQueueState()
+    }
+
+    private func nextQueuedJob() -> TranscriptionJob? {
+        transcriptionQueue
+            .filter { $0.status == .queued }
+            .sorted(by: { $0.createdAt < $1.createdAt })
+            .first
+    }
+
+    private func latestJob(for audioPath: String) -> TranscriptionJob? {
+        transcriptionQueue
+            .filter { $0.audioPath == audioPath }
+            .sorted(by: { $0.createdAt > $1.createdAt })
+            .first
+    }
+
+    private func persistQueue() throws {
+        try store.saveTranscriptionQueue(transcriptionQueue)
+    }
+
+    private func recalculateQueueState() {
+        queuedJobCount = transcriptionQueue.filter { $0.status == .queued }.count
+        runningJobID = transcriptionQueue.first(where: { $0.status == .running })?.id
+    }
+
+    private func removeQueueJobs(forAudioPath audioPath: String) {
+        transcriptionQueue.removeAll { $0.audioPath == audioPath }
+
+        do {
+            try persistQueue()
+            recalculateQueueState()
+        } catch {
+            statusMessage = "Failed to update transcription queue after delete: \(error.localizedDescription)"
+        }
+    }
+
+    private func rebindQueueJobs(fromAudioPath oldPath: String, toAudioPath newPath: String) throws {
+        for index in transcriptionQueue.indices where transcriptionQueue[index].audioPath == oldPath {
+            transcriptionQueue[index] = TranscriptionJob(
+                id: transcriptionQueue[index].id,
+                audioPath: newPath,
+                modelPath: transcriptionQueue[index].modelPath,
+                language: transcriptionQueue[index].language,
+                status: transcriptionQueue[index].status,
+                errorMessage: transcriptionQueue[index].errorMessage,
+                createdAt: transcriptionQueue[index].createdAt,
+                updatedAt: .now
+            )
+        }
+        try persistQueue()
+        recalculateQueueState()
     }
 
     private func loadTranscript(for item: RecordingItem) throws {
@@ -409,7 +582,11 @@ final class RecorderViewModel: ObservableObject {
         isTranscribing = true
 
         do {
-            let result = try liveSession.transcribeLive(audioURL: activeRecordingURL, finalPass: finalPass)
+            let result = try await transcribeLiveInBackground(
+                with: liveSession,
+                audioURL: activeRecordingURL,
+                finalPass: finalPass
+            )
             selectedTranscript = result.transcriptText.isEmpty ? "Listening..." : result.transcriptText
             if finalPass {
                 try reloadRecordings()
@@ -420,9 +597,9 @@ final class RecorderViewModel: ObservableObject {
                 statusMessage = "Recording and updating transcript..."
             }
         } catch {
-            if finalPass {
-                statusMessage = error.localizedDescription
-            }
+            statusMessage = finalPass
+                ? error.localizedDescription
+                : "Live transcription update failed: \(error.localizedDescription)"
         }
 
         isTranscribing = false
@@ -454,5 +631,22 @@ final class RecorderViewModel: ObservableObject {
             liveSession = nil
             return "Live transcription is unavailable: \(error.localizedDescription)"
         }
+    }
+
+    private func transcribeInBackground(audioURL: URL, configuration: WhisperConfiguration) async throws -> TranscriptionResult {
+        try await Task.detached(priority: .userInitiated) {
+            let transcriber = WhisperTranscriber()
+            return try transcriber.transcribe(audioURL: audioURL, configuration: configuration)
+        }.value
+    }
+
+    private func transcribeLiveInBackground(
+        with session: WhisperTranscriptionSession,
+        audioURL: URL,
+        finalPass: Bool
+    ) async throws -> TranscriptionResult {
+        try await Task.detached(priority: .userInitiated) {
+            try session.transcribeLive(audioURL: audioURL, finalPass: finalPass)
+        }.value
     }
 }

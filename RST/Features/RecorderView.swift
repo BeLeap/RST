@@ -226,8 +226,8 @@ struct RecorderView: View {
 
                     ZStack {
                         List(viewModel.recordings, selection: Binding(
-                            get: { viewModel.selectedRecordingID },
-                            set: { viewModel.selectRecording(id: $0) }
+                            get: { viewModel.selectedRecordingIDs },
+                            set: { viewModel.selectRecordings(ids: $0) }
                         )) { item in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(item.title)

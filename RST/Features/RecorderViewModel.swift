@@ -7,7 +7,7 @@ final class RecorderViewModel: ObservableObject {
     private static let liveUpdateInterval: TimeInterval = 2.5
 
     @Published private(set) var recordings: [RecordingItem] = []
-    @Published var selectedRecordingID: RecordingItem.ID?
+    @Published var selectedRecordingIDs: Set<RecordingItem.ID> = []
     @Published private(set) var selectedTranscript = "No transcript selected."
     @Published private(set) var isRecording = false
     @Published private(set) var isTranscribing = false
@@ -33,12 +33,15 @@ final class RecorderViewModel: ObservableObject {
         do {
             try reloadRecordings()
             if let first = recordings.first {
-                selectedRecordingID = first.id
-                try loadTranscript(for: first)
+                try selectSingleRecording(id: first.id)
             }
         } catch {
             statusMessage = error.localizedDescription
         }
+    }
+
+    var selectedRecordingID: RecordingItem.ID? {
+        recordings.first(where: { selectedRecordingIDs.contains($0.id) })?.id
     }
 
     var selectedRecording: RecordingItem? {
@@ -50,9 +53,23 @@ final class RecorderViewModel: ObservableObject {
     }
 
     func selectRecording(id: RecordingItem.ID?) {
-        selectedRecordingID = id
+        guard let id else {
+            selectedRecordingIDs = []
+            selectedTranscript = "No transcript selected."
+            return
+        }
 
-        guard let item = recordings.first(where: { $0.id == id }) else {
+        do {
+            try selectSingleRecording(id: id)
+        } catch {
+            selectedTranscript = error.localizedDescription
+        }
+    }
+
+    func selectRecordings(ids: Set<RecordingItem.ID>) {
+        selectedRecordingIDs = ids
+
+        guard let item = selectedRecording else {
             selectedTranscript = "No transcript selected."
             return
         }
@@ -96,7 +113,7 @@ final class RecorderViewModel: ObservableObject {
             activeRecordingURL = url
             isRecording = false
             try reloadRecordings()
-            selectedRecordingID = url.path
+            selectedRecordingIDs = [url.path]
             if let item = selectedRecording {
                 try loadTranscript(for: item)
             }
@@ -174,12 +191,17 @@ final class RecorderViewModel: ObservableObject {
     }
 
     func deleteSelectedRecording() {
-        guard let recordingID = selectedRecordingID else {
+        guard !selectedRecordingIDs.isEmpty else {
             statusMessage = "Select a recording first."
             return
         }
 
-        deleteRecording(id: recordingID)
+        if selectedRecordingIDs.count == 1, let recordingID = selectedRecordingID {
+            deleteRecording(id: recordingID)
+            return
+        }
+
+        deleteRecordings(ids: selectedRecordingIDs)
     }
 
     func deleteRecording(id: RecordingItem.ID) {
@@ -191,7 +213,7 @@ final class RecorderViewModel: ObservableObject {
         do {
             try store.deleteRecording(recording)
             try reloadRecordings()
-            selectedRecordingID = recordings.first?.id
+            selectedRecordingIDs = Set(recordings.first.map(\.id))
 
             if let next = selectedRecording {
                 try loadTranscript(for: next)
@@ -202,6 +224,45 @@ final class RecorderViewModel: ObservableObject {
             statusMessage = "Deleted \(recording.audioURL.lastPathComponent)"
         } catch {
             statusMessage = error.localizedDescription
+        }
+    }
+
+    func deleteRecordings(ids: Set<RecordingItem.ID>) {
+        let selectedItems = recordings.filter { ids.contains($0.id) }
+        guard !selectedItems.isEmpty else {
+            statusMessage = "The selected recordings could not be found."
+            return
+        }
+
+        var deletedCount = 0
+        var errors: [String] = []
+
+        for recording in selectedItems {
+            do {
+                try store.deleteRecording(recording)
+                deletedCount += 1
+            } catch {
+                errors.append("\(recording.audioURL.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+
+        do {
+            try reloadRecordings()
+            selectedRecordingIDs = Set(recordings.first.map(\.id))
+            if let next = selectedRecording {
+                try loadTranscript(for: next)
+            } else {
+                selectedTranscript = "No transcript selected."
+            }
+        } catch {
+            statusMessage = "Deleted \(deletedCount) recording(s), but failed to refresh the list: \(error.localizedDescription)"
+            return
+        }
+
+        if errors.isEmpty {
+            statusMessage = "Deleted \(deletedCount) recording(s)."
+        } else {
+            statusMessage = "Deleted \(deletedCount) recording(s), \(errors.count) failed: \(errors.joined(separator: " | "))"
         }
     }
 
@@ -231,7 +292,7 @@ final class RecorderViewModel: ObservableObject {
         do {
             let newAudioURL = try store.renameRecording(recording, to: inputField.stringValue)
             try reloadRecordings()
-            selectedRecordingID = newAudioURL.path
+            selectedRecordingIDs = [newAudioURL.path]
             if let renamed = selectedRecording {
                 try loadTranscript(for: renamed)
             }
@@ -242,8 +303,13 @@ final class RecorderViewModel: ObservableObject {
     }
 
     func renameSelectedRecording() {
-        guard let selectedRecordingID else {
+        guard !selectedRecordingIDs.isEmpty else {
             statusMessage = "Select a recording first."
+            return
+        }
+
+        guard selectedRecordingIDs.count == 1, let selectedRecordingID else {
+            statusMessage = "Select a single recording to rename."
             return
         }
 
@@ -301,7 +367,7 @@ final class RecorderViewModel: ObservableObject {
 
         if let firstImported = importedURLs.first,
            let importedItem = recordings.first(where: { $0.audioURL == firstImported }) {
-            selectedRecordingID = importedItem.id
+            selectedRecordingIDs = [importedItem.id]
             do {
                 try loadTranscript(for: importedItem)
             } catch {
@@ -370,7 +436,7 @@ final class RecorderViewModel: ObservableObject {
         do {
             let result = try transcriber.transcribe(audioURL: audioURL, configuration: configuration)
             try reloadRecordings()
-            selectedRecordingID = audioURL.path
+            selectedRecordingIDs = [audioURL.path]
             selectedTranscript = result.transcriptText
             statusMessage = "Transcript saved to \(result.transcriptURL.lastPathComponent)"
         } catch {
@@ -413,7 +479,7 @@ final class RecorderViewModel: ObservableObject {
             selectedTranscript = result.transcriptText.isEmpty ? "Listening..." : result.transcriptText
             if finalPass {
                 try reloadRecordings()
-                selectedRecordingID = activeRecordingURL.path
+                selectedRecordingIDs = [activeRecordingURL.path]
                 statusMessage = "Saved recording and transcript."
                 self.liveSession = nil
             } else {
@@ -454,5 +520,14 @@ final class RecorderViewModel: ObservableObject {
             liveSession = nil
             return "Live transcription is unavailable: \(error.localizedDescription)"
         }
+    }
+
+    private func selectSingleRecording(id: RecordingItem.ID) throws {
+        selectedRecordingIDs = [id]
+        guard let item = recordings.first(where: { $0.id == id }) else {
+            selectedTranscript = "No transcript selected."
+            return
+        }
+        try loadTranscript(for: item)
     }
 }

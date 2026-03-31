@@ -212,13 +212,6 @@ struct RecorderView: View {
                     }
 
                     HStack(spacing: 12) {
-                        Button("Transcribe Latest") {
-                            Task {
-                                await viewModel.transcribeLatest(configuration: batchWhisperConfiguration)
-                            }
-                        }
-                        .disabled(viewModel.isRecording || viewModel.isTranscribing)
-
                         Button("Open Recordings Folder") {
                             viewModel.openRecordingsFolder()
                         }

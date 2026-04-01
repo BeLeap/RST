@@ -266,100 +266,21 @@ final class LlamaModelStore: ObservableObject {
         from sourceURL: URL,
         to temporaryFileURL: URL,
         existingBytes: Int64,
-        onProgress: @escaping (LlamaDownloadProgressUpdate) -> Void
+        onProgress: @Sendable @escaping (LlamaDownloadProgressUpdate) -> Void
     ) async throws -> URL {
-        let urlSession = URLSession(configuration: urlSessionConfiguration)
-        defer {
-            urlSession.invalidateAndCancel()
+        let downloader = ModelFileDownloader(sessionConfiguration: urlSessionConfiguration)
+        return try await downloader.download(
+            from: sourceURL,
+            to: temporaryFileURL,
+            existingBytes: existingBytes
+        ) { @Sendable progress in
+            onProgress(
+                LlamaDownloadProgressUpdate(
+                    progress: progress.progress,
+                    estimatedRemaining: progress.estimatedRemaining
+                )
+            )
         }
-
-        var request = URLRequest(url: sourceURL)
-        request.timeoutInterval = 300
-        if existingBytes > 0 {
-            request.setValue("bytes=\(existingBytes)-", forHTTPHeaderField: "Range")
-        }
-
-        let (bytes, response) = try await urlSession.bytes(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw LlamaDownloadError.invalidResponse
-        }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            throw LlamaDownloadError.invalidStatusCode(httpResponse.statusCode)
-        }
-
-        if existingBytes > 0 && httpResponse.statusCode != 206 {
-            throw LlamaDownloadError.rangeNotSupported
-        }
-
-        if !FileManager.default.fileExists(atPath: temporaryFileURL.path) {
-            guard FileManager.default.createFile(atPath: temporaryFileURL.path, contents: nil) else {
-                throw LlamaDownloadError.unableToCreateTemporaryFile(temporaryFileURL.path)
-            }
-        }
-
-        let expectedContentLength = httpResponse.expectedContentLength
-        let totalContentLength: Int64 = {
-            if httpResponse.statusCode == 206 {
-                return expectedContentLength > 0 ? existingBytes + expectedContentLength : -1
-            }
-            return expectedContentLength
-        }()
-
-        let fileHandle = try FileHandle(forWritingTo: temporaryFileURL)
-        if existingBytes > 0 {
-            try fileHandle.seekToEnd()
-        } else {
-            try fileHandle.truncate(atOffset: 0)
-        }
-        var writeBuffer = Data()
-        writeBuffer.reserveCapacity(64 * 1024)
-        var downloadedBytes: Int64 = existingBytes
-        let downloadStartTime = Date()
-
-        do {
-            for try await byte in bytes {
-                try Task.checkCancellation()
-                writeBuffer.append(byte)
-                downloadedBytes += 1
-
-                if writeBuffer.count >= 64 * 1024 {
-                    try fileHandle.write(contentsOf: writeBuffer)
-                    writeBuffer.removeAll(keepingCapacity: true)
-                }
-
-                if totalContentLength > 0, downloadedBytes % Int64(256 * 1024) == 0 {
-                    onProgress(
-                        LlamaDownloadProgressUpdate(
-                            progress: Double(downloadedBytes) / Double(totalContentLength),
-                            estimatedRemaining: estimateRemainingTime(
-                                totalBytes: totalContentLength,
-                                downloadedBytes: downloadedBytes,
-                                existingBytes: existingBytes,
-                                downloadStartTime: downloadStartTime
-                            )
-                        )
-                    )
-                }
-            }
-
-            if !writeBuffer.isEmpty {
-                try fileHandle.write(contentsOf: writeBuffer)
-            }
-            try fileHandle.close()
-        } catch {
-            try? fileHandle.close()
-            throw error
-        }
-
-        if expectedContentLength > 0 {
-            onProgress(LlamaDownloadProgressUpdate(progress: 1, estimatedRemaining: 0))
-        } else {
-            onProgress(LlamaDownloadProgressUpdate(progress: nil, estimatedRemaining: nil))
-        }
-
-        return temporaryFileURL
     }
 
     private func currentFileSize(at url: URL) -> Int64 {
@@ -369,29 +290,6 @@ final class LlamaModelStore: ObservableObject {
         }
         return size.int64Value
     }
-
-    private func estimateRemainingTime(
-        totalBytes: Int64,
-        downloadedBytes: Int64,
-        existingBytes: Int64,
-        downloadStartTime: Date
-    ) -> TimeInterval? {
-        let downloadedThisAttempt = downloadedBytes - existingBytes
-        guard downloadedThisAttempt > 0 else { return nil }
-
-        let elapsed = Date().timeIntervalSince(downloadStartTime)
-        guard elapsed > 0 else { return nil }
-
-        let bytesPerSecond = Double(downloadedThisAttempt) / elapsed
-        guard bytesPerSecond.isFinite, bytesPerSecond > 0 else { return nil }
-
-        let remainingBytes = totalBytes - downloadedBytes
-        guard remainingBytes > 0 else { return 0 }
-
-        let remaining = Double(remainingBytes) / bytesPerSecond
-        return remaining.isFinite ? max(remaining, 0) : nil
-    }
-
     private func formatRemainingTime(_ remaining: TimeInterval?) -> String? {
         guard let remaining else { return nil }
 
@@ -407,24 +305,4 @@ final class LlamaModelStore: ObservableObject {
 private struct LlamaDownloadProgressUpdate {
     let progress: Double?
     let estimatedRemaining: TimeInterval?
-}
-
-private enum LlamaDownloadError: LocalizedError {
-    case invalidResponse
-    case invalidStatusCode(Int)
-    case unableToCreateTemporaryFile(String)
-    case rangeNotSupported
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidResponse:
-            return "Model download returned an invalid response."
-        case .invalidStatusCode(let statusCode):
-            return "Model download failed with status code \(statusCode)."
-        case .unableToCreateTemporaryFile(let filePath):
-            return "Model download could not create a temporary file at \(filePath)."
-        case .rangeNotSupported:
-            return "Model host does not support resumable downloads for this file."
-        }
-    }
 }

@@ -6,6 +6,7 @@ RST.xcodeproj/xcuserdata/
 
 # Local build output
 .build/
+.derived-data/
 
 # Generated vendor framework/build artifacts
 Vendor/whisper.cpp/build-apple/

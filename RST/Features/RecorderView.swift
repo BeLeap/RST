@@ -29,8 +29,7 @@ struct RecorderView: View {
     }
 
     private var sidebar: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Local Whisper")
                         .font(.title2.bold())
@@ -318,16 +317,15 @@ struct RecorderView: View {
                                 .allowsHitTesting(false)
                         }
                     }
-                    .frame(minHeight: 260)
+                    .frame(minHeight: 260, maxHeight: .infinity)
                     .onDrop(of: ["public.file-url"], isTargeted: $isFileDropTargeted) { providers in
                         viewModel.importDroppedAudio(providers: providers)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
         .padding(20)
-        .frame(minWidth: 340)
+        .frame(minWidth: 340, maxHeight: .infinity, alignment: .topLeading)
         .alert("Delete recording?", isPresented: $isShowingDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 guard let pendingDeleteRecordingID else {

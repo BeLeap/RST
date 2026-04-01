@@ -6,3 +6,11 @@ RST.xcodeproj/xcuserdata/
 
 # Local build output
 .build/
+
+# Generated vendor framework/build artifacts
+Vendor/whisper.cpp/build-apple/
+Vendor/whisper.cpp/build-ios-sim/
+Vendor/whisper.cpp/build-macos-ninja/
+Vendor/whisper.cpp/build-macos-only/
+Vendor/llama.cpp/build-apple/
+Vendor/llama.cpp/build-macos-only/

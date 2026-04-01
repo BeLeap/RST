@@ -31,7 +31,13 @@ The app links `whisper.cpp` and `llama.cpp` as frameworks, so there is no separa
 direnv allow .
 ```
 
-2. Build the vendored `whisper.cpp` and `llama.cpp` xcframeworks once:
+2. Initialize the vendored submodules:
+
+```bash
+git submodule update --init --recursive
+```
+
+3. Build the vendored `whisper.cpp` and `llama.cpp` xcframeworks once:
 
 ```bash
 ./scripts/build-whisper-framework.sh
@@ -40,22 +46,22 @@ direnv allow .
 
 You can also use `just build-whisper`, `just build-llama`, `just build-app`, or `just build`.
 
-3. Open [`RST.xcodeproj`](/Users/beleap/pj/github.com/beleap/RST/RST.xcodeproj/project.pbxproj) in Xcode.
-4. Build and run the `RST` target.
-5. If macOS blocks the app after moving it, clear quarantine attributes and relaunch:
+4. Open [`RST.xcodeproj`](/Users/beleap/pj/github.com/beleap/RST/RST.xcodeproj/project.pbxproj) in Xcode.
+5. Build and run the `RST` target.
+6. If macOS blocks the app after moving it, clear quarantine attributes and relaunch:
 
 ```bash
 xattr -cr /Application/RST.app
 ```
 
-6. In the sidebar, set:
+7. In the sidebar, set:
    - a realtime Whisper model (typically smaller/faster) for live transcript updates while recording
    - a batch Whisper model (typically larger/more accurate) for final transcript generation
    - an embedding `.gguf` model for semantic chunk selection
    - a summary `.gguf` model for the final note generation
    - the transcription language, or `auto`
-7. Start recording. The transcript view updates periodically while audio is still being captured.
-8. Stop recording for a final pass. After the final transcript completes, the app also generates a summary if both llama models are configured.
+8. Start recording. The transcript view updates periodically while audio is still being captured.
+9. Stop recording for a final pass. After the final transcript completes, the app also generates a summary if both llama models are configured.
 
 ## Development Environment
 

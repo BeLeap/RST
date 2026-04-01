@@ -2,7 +2,8 @@ import SwiftUI
 
 struct RecorderView: View {
     @ObservedObject var viewModel: RecorderViewModel
-    @StateObject private var modelStore = WhisperModelStore()
+    @StateObject private var whisperModelStore = WhisperModelStore()
+    @StateObject private var llamaModelStore = LlamaModelStore()
     @State private var pendingDeleteRecordingID: RecordingItem.ID?
     @State private var isShowingDeleteConfirmation = false
     @State private var isFileDropTargeted = false
@@ -12,7 +13,9 @@ struct RecorderView: View {
     @AppStorage("whisperBatchModelSelection") private var whisperBatchModelSelection = WhisperModelPreset.customID
     @AppStorage("whisperBatchModelPath") private var whisperBatchModelPath = ""
     @AppStorage("whisperLanguage") private var whisperLanguage = "auto"
+    @AppStorage("llamaEmbeddingModelSelection") private var llamaEmbeddingModelSelection = LlamaModelPreset.customID
     @AppStorage("llamaEmbeddingModelPath") private var llamaEmbeddingModelPath = ""
+    @AppStorage("llamaSummaryModelSelection") private var llamaSummaryModelSelection = LlamaModelPreset.customID
     @AppStorage("llamaSummaryModelPath") private var llamaSummaryModelPath = ""
 
     var body: some View {
@@ -22,10 +25,15 @@ struct RecorderView: View {
             detail
         }
         .navigationSplitViewStyle(.balanced)
-        .task(id: "\(whisperLiveModelSelection)|\(whisperBatchModelSelection)") {
-            await modelStore.prepareSelection(whisperLiveModelSelection)
+        .task(id: "\(whisperLiveModelSelection)|\(whisperBatchModelSelection)|\(llamaEmbeddingModelSelection)|\(llamaSummaryModelSelection)") {
+            await whisperModelStore.prepareSelection(whisperLiveModelSelection)
             if whisperBatchModelSelection != whisperLiveModelSelection {
-                await modelStore.prepareSelection(whisperBatchModelSelection)
+                await whisperModelStore.prepareSelection(whisperBatchModelSelection)
+            }
+
+            await llamaModelStore.prepareSelection(llamaEmbeddingModelSelection)
+            if llamaSummaryModelSelection != llamaEmbeddingModelSelection {
+                await llamaModelStore.prepareSelection(llamaSummaryModelSelection)
             }
         }
     }
@@ -50,32 +58,32 @@ struct RecorderView: View {
 
                         if let preset = WhisperModelPreset.preset(id: whisperLiveModelSelection) {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text(modelStore.localPath(for: preset))
+                                Text(whisperModelStore.localPath(for: preset))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .textSelection(.enabled)
 
                                 HStack(spacing: 8) {
-                                    Button(modelStore.isDownloaded(preset) ? "Redownload" : "Download") {
+                                    Button(whisperModelStore.isDownloaded(preset) ? "Redownload" : "Download") {
                                         Task {
-                                            await modelStore.redownloadSelectedModel(whisperLiveModelSelection)
+                                            await whisperModelStore.redownloadSelectedModel(whisperLiveModelSelection)
                                         }
                                     }
-                                    .disabled(modelStore.activeDownloadID != nil)
+                                    .disabled(whisperModelStore.activeDownloadID != nil)
 
-                                    if modelStore.activeDownloadID == preset.id {
+                                    if whisperModelStore.activeDownloadID == preset.id {
                                         Button("Cancel") {
-                                            modelStore.cancelActiveDownload()
+                                            whisperModelStore.cancelActiveDownload()
                                         }
                                     }
 
                                     Button("Open Models Folder") {
-                                        modelStore.openModelsFolder()
+                                        whisperModelStore.openModelsFolder()
                                     }
 
-                                    if modelStore.activeDownloadID == preset.id {
+                                    if whisperModelStore.activeDownloadID == preset.id {
                                         VStack(alignment: .leading, spacing: 4) {
-                                            if let activeDownloadProgress = modelStore.activeDownloadProgress {
+                                            if let activeDownloadProgress = whisperModelStore.activeDownloadProgress {
                                                 ProgressView(value: activeDownloadProgress, total: 1.0)
                                                     .frame(width: 120)
                                                     .controlSize(.small)
@@ -84,7 +92,7 @@ struct RecorderView: View {
                                                     .controlSize(.small)
                                             }
 
-                                            if let remainingTime = modelStore.activeDownloadRemainingTime {
+                                            if let remainingTime = whisperModelStore.activeDownloadRemainingTime {
                                                 Text("\(remainingTime) remaining")
                                                     .font(.caption2)
                                                     .foregroundStyle(.secondary)
@@ -114,28 +122,28 @@ struct RecorderView: View {
 
                         if let preset = WhisperModelPreset.preset(id: whisperBatchModelSelection) {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text(modelStore.localPath(for: preset))
+                                Text(whisperModelStore.localPath(for: preset))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .textSelection(.enabled)
 
                                 HStack(spacing: 8) {
-                                    Button(modelStore.isDownloaded(preset) ? "Redownload" : "Download") {
+                                    Button(whisperModelStore.isDownloaded(preset) ? "Redownload" : "Download") {
                                         Task {
-                                            await modelStore.redownloadSelectedModel(whisperBatchModelSelection)
+                                            await whisperModelStore.redownloadSelectedModel(whisperBatchModelSelection)
                                         }
                                     }
-                                    .disabled(modelStore.activeDownloadID != nil)
+                                    .disabled(whisperModelStore.activeDownloadID != nil)
 
-                                    if modelStore.activeDownloadID == preset.id {
+                                    if whisperModelStore.activeDownloadID == preset.id {
                                         Button("Cancel") {
-                                            modelStore.cancelActiveDownload()
+                                            whisperModelStore.cancelActiveDownload()
                                         }
                                     }
 
-                                    if modelStore.activeDownloadID == preset.id {
+                                    if whisperModelStore.activeDownloadID == preset.id {
                                         VStack(alignment: .leading, spacing: 4) {
-                                            if let activeDownloadProgress = modelStore.activeDownloadProgress {
+                                            if let activeDownloadProgress = whisperModelStore.activeDownloadProgress {
                                                 ProgressView(value: activeDownloadProgress, total: 1.0)
                                                     .frame(width: 120)
                                                     .controlSize(.small)
@@ -144,7 +152,7 @@ struct RecorderView: View {
                                                     .controlSize(.small)
                                             }
 
-                                            if let remainingTime = modelStore.activeDownloadRemainingTime {
+                                            if let remainingTime = whisperModelStore.activeDownloadRemainingTime {
                                                 Text("\(remainingTime) remaining")
                                                     .font(.caption2)
                                                     .foregroundStyle(.secondary)
@@ -162,7 +170,7 @@ struct RecorderView: View {
                         }
 
                         Button("Open Models Folder") {
-                            modelStore.openModelsFolder()
+                            whisperModelStore.openModelsFolder()
                         }
                     }
 
@@ -177,27 +185,45 @@ struct RecorderView: View {
                         Text("llama.cpp Summary")
                             .font(.headline)
 
-                        pathField(title: "Embedding Model (.gguf)", text: $llamaEmbeddingModelPath, browseAction: {
-                            if let url = PanelPicker.chooseFile(title: "Choose embedding model", allowedFileTypes: ["gguf"]) {
-                                llamaEmbeddingModelPath = url.path
-                            }
-                        })
+                        llamaModelSection(
+                            title: "Embedding Model",
+                            role: .embedding,
+                            selection: $llamaEmbeddingModelSelection,
+                            customPath: $llamaEmbeddingModelPath,
+                            browseTitle: "Choose embedding model"
+                        )
 
-                        pathField(title: "Summary Model (.gguf)", text: $llamaSummaryModelPath, browseAction: {
-                            if let url = PanelPicker.chooseFile(title: "Choose summary model", allowedFileTypes: ["gguf"]) {
-                                llamaSummaryModelPath = url.path
-                            }
-                        })
+                        llamaModelSection(
+                            title: "Summary Model",
+                            role: .summary,
+                            selection: $llamaSummaryModelSelection,
+                            customPath: $llamaSummaryModelPath,
+                            browseTitle: "Choose summary model"
+                        )
+
+                        Button("Open Models Folder") {
+                            llamaModelStore.openModelsFolder()
+                        }
                     }
 
-                    Text("Live: \(modelStore.selectionSummary(selectedModelID: whisperLiveModelSelection, customModelPath: whisperLiveModelPath))")
+                    Text("Live: \(whisperModelStore.selectionSummary(selectedModelID: whisperLiveModelSelection, customModelPath: whisperLiveModelPath))")
                         .font(.footnote)
-                        .foregroundStyle(modelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
+                        .foregroundStyle(whisperModelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Batch: \(modelStore.selectionSummary(selectedModelID: whisperBatchModelSelection, customModelPath: whisperBatchModelPath))")
+                    Text("Batch: \(whisperModelStore.selectionSummary(selectedModelID: whisperBatchModelSelection, customModelPath: whisperBatchModelPath))")
                         .font(.footnote)
-                        .foregroundStyle(modelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
+                        .foregroundStyle(whisperModelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("Embedding: \(llamaModelStore.selectionSummary(selectedModelID: llamaEmbeddingModelSelection, customModelPath: llamaEmbeddingModelPath))")
+                        .font(.footnote)
+                        .foregroundStyle(llamaModelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("Summary: \(llamaModelStore.selectionSummary(selectedModelID: llamaSummaryModelSelection, customModelPath: llamaSummaryModelPath))")
+                        .font(.footnote)
+                        .foregroundStyle(llamaModelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
                         .fixedSize(horizontal: false, vertical: true)
 
                     Text("The app records WAV files locally, transcribes them with embedded Whisper, and can summarize final transcripts through embedded llama.cpp.")
@@ -368,6 +394,76 @@ struct RecorderView: View {
         }
     }
 
+    private func llamaModelSection(
+        title: String,
+        role: LlamaModelRole,
+        selection: Binding<String>,
+        customPath: Binding<String>,
+        browseTitle: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.headline)
+
+            Picker(title, selection: selection) {
+                Text("Custom Path").tag(LlamaModelPreset.customID)
+                ForEach(LlamaModelPreset.catalog(for: role)) { preset in
+                    Text("\(preset.name) (\(preset.sizeDescription))").tag(preset.id)
+                }
+            }
+            .pickerStyle(.menu)
+
+            if let preset = LlamaModelPreset.preset(id: selection.wrappedValue) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(llamaModelStore.localPath(for: preset))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+
+                    HStack(spacing: 8) {
+                        Button(llamaModelStore.isDownloaded(preset) ? "Redownload" : "Download") {
+                            Task {
+                                await llamaModelStore.redownloadSelectedModel(selection.wrappedValue)
+                            }
+                        }
+                        .disabled(llamaModelStore.activeDownloadID != nil)
+
+                        if llamaModelStore.activeDownloadID == preset.id {
+                            Button("Cancel") {
+                                llamaModelStore.cancelActiveDownload()
+                            }
+                        }
+
+                        if llamaModelStore.activeDownloadID == preset.id {
+                            VStack(alignment: .leading, spacing: 4) {
+                                if let activeDownloadProgress = llamaModelStore.activeDownloadProgress {
+                                    ProgressView(value: activeDownloadProgress, total: 1.0)
+                                        .frame(width: 120)
+                                        .controlSize(.small)
+                                } else {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+
+                                if let remainingTime = llamaModelStore.activeDownloadRemainingTime {
+                                    Text("\(remainingTime) remaining")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                pathField(title: "\(title) (.gguf)", text: customPath, browseAction: {
+                    if let url = PanelPicker.chooseFile(title: browseTitle, allowedFileTypes: ["gguf"]) {
+                        customPath.wrappedValue = url.path
+                    }
+                })
+            }
+        }
+    }
+
     private var detail: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
@@ -432,7 +528,7 @@ struct RecorderView: View {
 
     private var whisperConfiguration: WhisperConfiguration {
         WhisperConfiguration(
-            modelPath: modelStore.resolveModelPath(
+            modelPath: whisperModelStore.resolveModelPath(
                 selectedModelID: whisperLiveModelSelection,
                 customModelPath: whisperLiveModelPath
             ),
@@ -442,7 +538,7 @@ struct RecorderView: View {
 
     private var batchWhisperConfiguration: WhisperConfiguration {
         WhisperConfiguration(
-            modelPath: modelStore.resolveModelPath(
+            modelPath: whisperModelStore.resolveModelPath(
                 selectedModelID: whisperBatchModelSelection,
                 customModelPath: whisperBatchModelPath
             ),
@@ -452,8 +548,14 @@ struct RecorderView: View {
 
     private var llamaSummaryConfiguration: LlamaSummaryConfiguration {
         LlamaSummaryConfiguration(
-            embeddingModelPath: llamaEmbeddingModelPath,
-            summaryModelPath: llamaSummaryModelPath
+            embeddingModelPath: llamaModelStore.resolveModelPath(
+                selectedModelID: llamaEmbeddingModelSelection,
+                customModelPath: llamaEmbeddingModelPath
+            ),
+            summaryModelPath: llamaModelStore.resolveModelPath(
+                selectedModelID: llamaSummaryModelSelection,
+                customModelPath: llamaSummaryModelPath
+            )
         )
     }
 }

@@ -177,7 +177,9 @@ struct LlamaSummaryService {
         from chunks: [String],
         using embedder: EmbeddedLlamaEmbedder
     ) throws -> [Int] {
-        let embeddings = try chunks.map { try embedder.embed(text: $0) }
+        let embeddings = try chunks.map { chunk in
+            try embedder.embed(text: embeddingInput(for: chunk, modelPath: embedder.modelPath))
+        }
         guard let first = embeddings.first else {
             return []
         }
@@ -204,6 +206,14 @@ struct LlamaSummaryService {
             }
             .prefix(min(4, embeddings.count))
             .map(\.index)
+    }
+
+    private func embeddingInput(for text: String, modelPath: String) -> String {
+        let filename = URL(fileURLWithPath: modelPath).lastPathComponent.lowercased()
+        if filename.contains("nomic-embed-text") {
+            return "search_document: \(text)"
+        }
+        return text
     }
 
     private func cosineSimilarity(_ lhs: [Float], _ rhs: [Float]) -> Float {
@@ -241,7 +251,7 @@ private enum EmbeddedLlamaRuntime {
 }
 
 private final class EmbeddedLlamaEmbedder {
-    private let modelPath: String
+    let modelPath: String
     private let model: OpaquePointer
     private let context: OpaquePointer
     private let vocab: OpaquePointer

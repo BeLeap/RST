@@ -9,6 +9,7 @@
 - Saves transcript files next to the audio as `*-transcript.txt`
 - Can summarize the final transcript with embedded `llama.cpp` and saves it as `*-summary.txt`
 - Lets you configure separate Whisper models for realtime and final-pass transcription, then auto-download presets into `~/Library/Application Support/RST/Models`
+- Lets you choose preset llama embedding and summary models and auto-download them into `~/Library/Application Support/RST/Models`
 - Exports the selected audio file or transcript to a user-chosen destination
 - Lets you reveal the saved audio and transcript in Finder
 
@@ -21,7 +22,7 @@
 
 ## Requirements
 
-The app links `whisper.cpp` and `llama.cpp` as frameworks, so there is no separate CLI runtime dependency. You can either select a preset Whisper model and let the app download it locally, or point the app at existing `.bin` / `.gguf` files.
+The app links `whisper.cpp` and `llama.cpp` as frameworks, so there is no separate CLI runtime dependency. You can select preset Whisper and llama models and let the app download them locally, or point the app at existing `.bin` / `.gguf` files.
 
 ## Running
 

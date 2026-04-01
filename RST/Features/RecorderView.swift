@@ -12,6 +12,8 @@ struct RecorderView: View {
     @AppStorage("whisperBatchModelSelection") private var whisperBatchModelSelection = WhisperModelPreset.customID
     @AppStorage("whisperBatchModelPath") private var whisperBatchModelPath = ""
     @AppStorage("whisperLanguage") private var whisperLanguage = "auto"
+    @AppStorage("llamaEmbeddingModelPath") private var llamaEmbeddingModelPath = ""
+    @AppStorage("llamaSummaryModelPath") private var llamaSummaryModelPath = ""
 
     var body: some View {
         NavigationSplitView {
@@ -171,6 +173,23 @@ struct RecorderView: View {
                             .textFieldStyle(.roundedBorder)
                     }
 
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("llama.cpp Summary")
+                            .font(.headline)
+
+                        pathField(title: "Embedding Model (.gguf)", text: $llamaEmbeddingModelPath, browseAction: {
+                            if let url = PanelPicker.chooseFile(title: "Choose embedding model", allowedFileTypes: ["gguf"]) {
+                                llamaEmbeddingModelPath = url.path
+                            }
+                        })
+
+                        pathField(title: "Summary Model (.gguf)", text: $llamaSummaryModelPath, browseAction: {
+                            if let url = PanelPicker.chooseFile(title: "Choose summary model", allowedFileTypes: ["gguf"]) {
+                                llamaSummaryModelPath = url.path
+                            }
+                        })
+                    }
+
                     Text("Live: \(modelStore.selectionSummary(selectedModelID: whisperLiveModelSelection, customModelPath: whisperLiveModelPath))")
                         .font(.footnote)
                         .foregroundStyle(modelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
@@ -181,7 +200,7 @@ struct RecorderView: View {
                         .foregroundStyle(modelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("The app records WAV files locally and transcribes them with embedded Whisper. No external API is used.")
+                    Text("The app records WAV files locally, transcribes them with embedded Whisper, and can summarize final transcripts through embedded llama.cpp.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -204,7 +223,10 @@ struct RecorderView: View {
 
                         Button("Stop Recording") {
                             Task {
-                                await viewModel.stopRecording(finalConfiguration: batchWhisperConfiguration)
+                                await viewModel.stopRecording(
+                                    finalConfiguration: batchWhisperConfiguration,
+                                    summaryConfiguration: llamaSummaryConfiguration
+                                )
                             }
                         }
                         .keyboardShortcut(".", modifiers: [.command])
@@ -272,7 +294,10 @@ struct RecorderView: View {
                                 Button("Transcribe") {
                                     viewModel.selectRecording(id: item.id)
                                     Task {
-                                        await viewModel.transcribeSelected(configuration: batchWhisperConfiguration)
+                                        await viewModel.transcribeSelected(
+                                            configuration: batchWhisperConfiguration,
+                                            summaryConfiguration: llamaSummaryConfiguration
+                                        )
                                     }
                                 }
                                 .disabled(viewModel.isRecording)
@@ -363,10 +388,26 @@ struct RecorderView: View {
             }
 
             ScrollView {
-                Text(viewModel.selectedTranscript)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .padding(18)
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Summary")
+                            .font(.title3.bold())
+                        Text(viewModel.selectedSummary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Transcript")
+                            .font(.title3.bold())
+                        Text(viewModel.selectedTranscript)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(18)
             }
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -406,6 +447,13 @@ struct RecorderView: View {
                 customModelPath: whisperBatchModelPath
             ),
             language: whisperLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private var llamaSummaryConfiguration: LlamaSummaryConfiguration {
+        LlamaSummaryConfiguration(
+            embeddingModelPath: llamaEmbeddingModelPath,
+            summaryModelPath: llamaSummaryModelPath
         )
     }
 }

@@ -10,9 +10,13 @@ default:
 build-whisper:
   ./scripts/build-whisper-framework.sh
 
+# Build the vendored llama.cpp xcframework.
+build-llama:
+  ./scripts/build-llama-framework.sh
+
 # Build the macOS app with xcodebuild.
 build-app:
   xcodebuild -project RST.xcodeproj -scheme RST -configuration Debug -derivedDataPath {{derived_data}} build
 
-# Build the embedded Whisper framework and then the app.
-build: build-whisper build-app
+# Build the embedded Whisper and llama frameworks and then the app.
+build: build-whisper build-llama build-app

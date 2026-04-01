@@ -12,6 +12,8 @@ struct TranscriptionJob: Codable, Identifiable, Equatable {
     let audioPath: String
     let modelPath: String
     let language: String
+    let summaryEmbeddingModelPath: String
+    let summaryModelPath: String
     var status: TranscriptionJobStatus
     var errorMessage: String?
     let createdAt: Date
@@ -22,6 +24,8 @@ struct TranscriptionJob: Codable, Identifiable, Equatable {
         audioPath: String,
         modelPath: String,
         language: String,
+        summaryEmbeddingModelPath: String = "",
+        summaryModelPath: String = "",
         status: TranscriptionJobStatus = .queued,
         errorMessage: String? = nil,
         createdAt: Date = .now,
@@ -31,6 +35,8 @@ struct TranscriptionJob: Codable, Identifiable, Equatable {
         self.audioPath = audioPath
         self.modelPath = modelPath
         self.language = language
+        self.summaryEmbeddingModelPath = summaryEmbeddingModelPath
+        self.summaryModelPath = summaryModelPath
         self.status = status
         self.errorMessage = errorMessage
         self.createdAt = createdAt

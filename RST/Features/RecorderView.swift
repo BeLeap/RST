@@ -4,6 +4,7 @@ struct RecorderView: View {
     @ObservedObject var viewModel: RecorderViewModel
     @StateObject private var modelStore = WhisperModelStore()
     @State private var pendingDeleteRecordingID: RecordingItem.ID?
+    @State private var isShowingDeleteConfirmation = false
     @State private var isFileDropTargeted = false
 
     @AppStorage("whisperLiveModelSelection") private var whisperLiveModelSelection = "tiny"
@@ -234,8 +235,8 @@ struct RecorderView: View {
 
                     ZStack {
                         List(viewModel.recordings, selection: Binding(
-                            get: { viewModel.selectedRecordingID },
-                            set: { viewModel.selectRecording(id: $0) }
+                            get: { viewModel.selectedRecordingIDs },
+                            set: { viewModel.setSelectedRecordings(ids: $0) }
                         )) { item in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(item.title)
@@ -256,8 +257,15 @@ struct RecorderView: View {
                                 }
 
                                 Button("Delete", role: .destructive) {
-                                    viewModel.selectRecording(id: item.id)
-                                    pendingDeleteRecordingID = item.id
+                                    if viewModel.selectedRecordingIDs.contains(item.id),
+                                       viewModel.selectedRecordingIDs.count > 1 {
+                                        pendingDeleteRecordingID = nil
+                                        isShowingDeleteConfirmation = true
+                                    } else {
+                                        viewModel.selectRecording(id: item.id)
+                                        pendingDeleteRecordingID = item.id
+                                        isShowingDeleteConfirmation = true
+                                    }
                                 }
 
                                 Divider()
@@ -320,14 +328,7 @@ struct RecorderView: View {
         }
         .padding(20)
         .frame(minWidth: 340)
-        .alert("Delete recording?", isPresented: Binding(
-            get: { pendingDeleteRecordingID != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingDeleteRecordingID = nil
-                }
-            }
-        )) {
+        .alert("Delete recording?", isPresented: $isShowingDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 guard let pendingDeleteRecordingID else {
                     viewModel.deleteSelectedRecording()
@@ -336,7 +337,9 @@ struct RecorderView: View {
                 viewModel.deleteRecording(id: pendingDeleteRecordingID)
                 self.pendingDeleteRecordingID = nil
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) {
+                pendingDeleteRecordingID = nil
+            }
         } message: {
             Text("This removes the selected recording and related transcript files from disk.")
         }

@@ -328,6 +328,16 @@ struct RecorderView: View {
                                 }
                                 .disabled(viewModel.isRecording)
 
+                                Button("Summarize") {
+                                    viewModel.selectRecording(id: item.id)
+                                    Task {
+                                        await viewModel.summarizeSelected(
+                                            summaryConfiguration: llamaSummaryConfiguration
+                                        )
+                                    }
+                                }
+                                .disabled(viewModel.isRecording || item.transcriptURL == nil)
+
                                 Button("Reveal Audio") {
                                     viewModel.selectRecording(id: item.id)
                                     viewModel.revealAudio()

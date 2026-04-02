@@ -1,13 +1,15 @@
 # RST
 
-`RST` is a macOS app for local audio recording and embedded Whisper transcription.
+`RST` is a macOS app for local audio recording, embedded Whisper transcription, and embedded llama.cpp summarization.
 
 ## What it does
 
 - Records microphone input into `.wav` files under `~/Library/Application Support/RST/Recordings`
 - Runs embedded `whisper.cpp` against those recordings while recording and again on the final file
 - Saves transcript files next to the audio as `*-transcript.txt`
+- Can summarize the final transcript with embedded `llama.cpp` and saves it as `*-summary.txt`
 - Lets you configure separate Whisper models for realtime and final-pass transcription, then auto-download presets into `~/Library/Application Support/RST/Models`
+- Lets you choose preset llama embedding and summary models and auto-download them into `~/Library/Application Support/RST/Models`
 - Exports the selected audio file or transcript to a user-chosen destination
 - Lets you reveal the saved audio and transcript in Finder
 
@@ -20,7 +22,7 @@
 
 ## Requirements
 
-The app links `whisper.cpp` as a framework, so there is no separate `whisper-cli` runtime dependency. You can either select a preset model and let the app download it locally, or point the app at an existing `.bin` file.
+The app links `whisper.cpp` and `llama.cpp` as frameworks, so there is no separate CLI runtime dependency. You can select preset Whisper and llama models and let the app download them locally, or point the app at existing `.bin` / `.gguf` files.
 
 ## Running
 
@@ -30,28 +32,37 @@ The app links `whisper.cpp` as a framework, so there is no separate `whisper-cli
 direnv allow .
 ```
 
-2. Build the vendored `whisper.cpp` xcframework once:
+2. Initialize the vendored submodules:
+
+```bash
+git submodule update --init --recursive
+```
+
+3. Build the vendored `whisper.cpp` and `llama.cpp` xcframeworks once:
 
 ```bash
 ./scripts/build-whisper-framework.sh
+./scripts/build-llama-framework.sh
 ```
 
-You can also use `just build-whisper`, `just build-app`, or `just build`.
+You can also use `just build-whisper`, `just build-llama`, `just build-app`, or `just build`.
 
-3. Open [`RST.xcodeproj`](/Users/beleap/pj/github.com/beleap/RST/RST.xcodeproj/project.pbxproj) in Xcode.
-4. Build and run the `RST` target.
-5. If macOS blocks the app after moving it, clear quarantine attributes and relaunch:
+4. Open [`RST.xcodeproj`](/Users/beleap/pj/github.com/beleap/RST/RST.xcodeproj/project.pbxproj) in Xcode.
+5. Build and run the `RST` target.
+6. If macOS blocks the app after moving it, clear quarantine attributes and relaunch:
 
 ```bash
 xattr -cr /Application/RST.app
 ```
 
-6. In the sidebar, set:
+7. In the sidebar, set:
    - a realtime Whisper model (typically smaller/faster) for live transcript updates while recording
    - a batch Whisper model (typically larger/more accurate) for final transcript generation
+   - an embedding `.gguf` model for semantic chunk selection
+   - a summary `.gguf` model for the final note generation
    - the transcription language, or `auto`
-7. Start recording. The transcript view updates periodically while audio is still being captured.
-8. Stop recording for a final pass, or export the selected `.wav` / `.txt` files from the sidebar.
+8. Start recording. The transcript view updates periodically while audio is still being captured.
+9. Stop recording for a final pass. After the final transcript completes, the app also generates a summary if both llama models are configured.
 
 ## Development Environment
 

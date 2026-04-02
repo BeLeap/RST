@@ -1,9 +1,14 @@
 import AppKit
-import Combine
 import Foundation
 
-struct WhisperModelPreset: Identifiable, Equatable {
+enum LlamaModelRole: String {
+    case embedding
+    case summary
+}
+
+struct LlamaModelPreset: Identifiable, Equatable {
     let id: String
+    let role: LlamaModelRole
     let name: String
     let filename: String
     let downloadURL: URL
@@ -11,54 +16,47 @@ struct WhisperModelPreset: Identifiable, Equatable {
 
     static let customID = "custom"
 
-    static let catalog: [WhisperModelPreset] = [
-        WhisperModelPreset(
-            id: "tiny",
-            name: "Tiny",
-            filename: "ggml-tiny.bin",
-            downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin?download=true")!,
-            sizeDescription: "~75 MB"
+    static let catalog: [LlamaModelPreset] = [
+        LlamaModelPreset(
+            id: "nomic-embed-text-v1.5-f32",
+            role: .embedding,
+            name: "Nomic Embed Text v1.5",
+            filename: "nomic-embed-text-v1.5.f32.gguf",
+            downloadURL: URL(string: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f32.gguf?download=true")!,
+            sizeDescription: "~548 MB"
         ),
-        WhisperModelPreset(
-            id: "base",
-            name: "Base",
-            filename: "ggml-base.bin",
-            downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin?download=true")!,
-            sizeDescription: "~142 MB"
+        LlamaModelPreset(
+            id: "qwen2.5-0.5b-instruct-q4_k_m",
+            role: .summary,
+            name: "Qwen2.5 0.5B Instruct Q4_K_M",
+            filename: "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            downloadURL: URL(string: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf?download=true")!,
+            sizeDescription: "~438 MB"
         ),
-        WhisperModelPreset(
-            id: "small",
-            name: "Small",
-            filename: "ggml-small.bin",
-            downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin?download=true")!,
-            sizeDescription: "~466 MB"
-        ),
-        WhisperModelPreset(
-            id: "medium",
-            name: "Medium",
-            filename: "ggml-medium.bin",
-            downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin?download=true")!,
-            sizeDescription: "~1.5 GB"
-        ),
-        WhisperModelPreset(
-            id: "large-v3-turbo",
-            name: "Large v3 Turbo",
-            filename: "ggml-large-v3-turbo.bin",
-            downloadURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true")!,
-            sizeDescription: "~1.6 GB"
+        LlamaModelPreset(
+            id: "qwen2.5-1.5b-instruct-q4_k_m",
+            role: .summary,
+            name: "Qwen2.5 1.5B Instruct Q4_K_M",
+            filename: "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            downloadURL: URL(string: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf?download=true")!,
+            sizeDescription: "~986 MB"
         )
     ]
 
-    static func preset(id: String) -> WhisperModelPreset? {
+    static func catalog(for role: LlamaModelRole) -> [LlamaModelPreset] {
+        catalog.filter { $0.role == role }
+    }
+
+    static func preset(id: String) -> LlamaModelPreset? {
         catalog.first { $0.id == id }
     }
 }
 
 @MainActor
-final class WhisperModelStore: ObservableObject {
+final class LlamaModelStore: ObservableObject {
     @Published private(set) var downloadedModelIDs: Set<String> = []
     @Published private(set) var activeDownloadID: String?
-    @Published private(set) var statusMessage = "Choose a Whisper model."
+    @Published private(set) var statusMessage = "Choose llama.cpp models."
     @Published private(set) var lastErrorMessage: String?
     @Published private(set) var activeDownloadProgress: Double?
     @Published private(set) var activeDownloadRemainingTime: String?
@@ -81,26 +79,26 @@ final class WhisperModelStore: ObservableObject {
 
     func refreshLocalModels() {
         downloadedModelIDs = Set(
-            WhisperModelPreset.catalog
+            LlamaModelPreset.catalog
                 .filter { fileManager.fileExists(atPath: localURL(for: $0).path) }
                 .map(\.id)
         )
     }
 
-    func localURL(for preset: WhisperModelPreset) -> URL {
+    func localURL(for preset: LlamaModelPreset) -> URL {
         transcriptStore.modelsDirectory.appendingPathComponent(preset.filename, isDirectory: false)
     }
 
-    func localPath(for preset: WhisperModelPreset) -> String {
+    func localPath(for preset: LlamaModelPreset) -> String {
         localURL(for: preset).path
     }
 
-    func isDownloaded(_ preset: WhisperModelPreset) -> Bool {
+    func isDownloaded(_ preset: LlamaModelPreset) -> Bool {
         downloadedModelIDs.contains(preset.id)
     }
 
     func resolveModelPath(selectedModelID: String, customModelPath: String) -> String {
-        if let preset = WhisperModelPreset.preset(id: selectedModelID) {
+        if let preset = LlamaModelPreset.preset(id: selectedModelID) {
             return isDownloaded(preset) ? localPath(for: preset) : ""
         }
 
@@ -108,7 +106,7 @@ final class WhisperModelStore: ObservableObject {
     }
 
     func selectionSummary(selectedModelID: String, customModelPath: String) -> String {
-        if let preset = WhisperModelPreset.preset(id: selectedModelID) {
+        if let preset = LlamaModelPreset.preset(id: selectedModelID) {
             if isDownloaded(preset) {
                 return "Using downloaded \(preset.name) model."
             }
@@ -129,8 +127,8 @@ final class WhisperModelStore: ObservableObject {
     }
 
     func prepareSelection(_ selectedModelID: String) async {
-        guard let preset = WhisperModelPreset.preset(id: selectedModelID) else {
-            statusMessage = "Using a custom Whisper model path."
+        guard let preset = LlamaModelPreset.preset(id: selectedModelID) else {
+            statusMessage = "Using a custom llama.cpp model path."
             lastErrorMessage = nil
             return
         }
@@ -146,7 +144,7 @@ final class WhisperModelStore: ObservableObject {
     }
 
     func redownloadSelectedModel(_ selectedModelID: String) async {
-        guard let preset = WhisperModelPreset.preset(id: selectedModelID) else {
+        guard let preset = LlamaModelPreset.preset(id: selectedModelID) else {
             return
         }
         await download(preset: preset, force: true)
@@ -172,7 +170,7 @@ final class WhisperModelStore: ObservableObject {
         }
     }
 
-    private func download(preset: WhisperModelPreset, force: Bool = false) async {
+    private func download(preset: LlamaModelPreset, force: Bool = false) async {
         guard activeDownloadTask == nil else {
             statusMessage = "Another model download is already in progress."
             return
@@ -196,7 +194,7 @@ final class WhisperModelStore: ObservableObject {
         activeDownloadRemainingTime = nil
     }
 
-    private func performDownload(preset: WhisperModelPreset, force: Bool) async {
+    private func performDownload(preset: LlamaModelPreset, force: Bool) async {
         let destinationURL = localURL(for: preset)
         let temporaryURL = destinationURL.appendingPathExtension("download")
 
@@ -222,6 +220,7 @@ final class WhisperModelStore: ObservableObject {
                 let resumeSize = ByteCountFormatter.string(fromByteCount: existingBytes, countStyle: .file)
                 statusMessage = "Resuming \(preset.name) model download from \(resumeSize)..."
             }
+
             _ = try await downloadFile(
                 from: preset.downloadURL,
                 to: temporaryURL,
@@ -267,7 +266,7 @@ final class WhisperModelStore: ObservableObject {
         from sourceURL: URL,
         to temporaryFileURL: URL,
         existingBytes: Int64,
-        onProgress: @Sendable @escaping (DownloadProgressUpdate) -> Void
+        onProgress: @Sendable @escaping (LlamaDownloadProgressUpdate) -> Void
     ) async throws -> URL {
         let downloader = ModelFileDownloader(sessionConfiguration: urlSessionConfiguration)
         return try await downloader.download(
@@ -276,7 +275,7 @@ final class WhisperModelStore: ObservableObject {
             existingBytes: existingBytes
         ) { @Sendable progress in
             onProgress(
-                DownloadProgressUpdate(
+                LlamaDownloadProgressUpdate(
                     progress: progress.progress,
                     estimatedRemaining: progress.estimatedRemaining
                 )
@@ -303,7 +302,7 @@ final class WhisperModelStore: ObservableObject {
     }
 }
 
-private struct DownloadProgressUpdate {
+private struct LlamaDownloadProgressUpdate {
     let progress: Double?
     let estimatedRemaining: TimeInterval?
 }

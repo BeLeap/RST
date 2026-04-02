@@ -10,6 +10,7 @@ final class RecorderViewModel: ObservableObject {
     @Published var selectedRecordingID: RecordingItem.ID?
     @Published var selectedRecordingIDs: Set<RecordingItem.ID> = []
     @Published private(set) var selectedTranscript = "No transcript selected."
+    @Published private(set) var selectedSummary = "No summary selected."
     @Published private(set) var isRecording = false
     @Published private(set) var isTranscribing = false
     @Published private(set) var statusMessage = "Ready."
@@ -110,6 +111,7 @@ final class RecorderViewModel: ObservableObject {
 
         guard let item = recordings.first(where: { $0.id == id }) else {
             selectedTranscript = "No transcript selected."
+            selectedSummary = "No summary selected."
             return
         }
 
@@ -117,6 +119,7 @@ final class RecorderViewModel: ObservableObject {
             try loadTranscript(for: item)
         } catch {
             selectedTranscript = error.localizedDescription
+            selectedSummary = "No summary selected."
         }
     }
 
@@ -130,6 +133,7 @@ final class RecorderViewModel: ObservableObject {
             activeRecordingURL = url
             isRecording = true
             selectedTranscript = "Listening..."
+            selectedSummary = "Summary will be generated after recording stops."
             scheduleLiveUpdates()
             if let modelErrorMessage {
                 statusMessage = "Recording to \(url.lastPathComponent). \(modelErrorMessage)"
@@ -143,7 +147,10 @@ final class RecorderViewModel: ObservableObject {
         }
     }
 
-    func stopRecording(finalConfiguration: WhisperConfiguration) async {
+    func stopRecording(
+        finalConfiguration: WhisperConfiguration,
+        summaryConfiguration: LlamaSummaryConfiguration
+    ) async {
         do {
             liveUpdateTimer?.invalidate()
             liveUpdateTimer = nil
@@ -158,21 +165,32 @@ final class RecorderViewModel: ObservableObject {
                 try loadTranscript(for: item)
             }
             liveSession = nil
-            try enqueueTranscription(audioURL: url, configuration: finalConfiguration)
+            try enqueueTranscription(
+                audioURL: url,
+                configuration: finalConfiguration,
+                summaryConfiguration: summaryConfiguration
+            )
             statusMessage = "Saved recording \(url.lastPathComponent). Added final transcription to queue."
         } catch {
             statusMessage = error.localizedDescription
         }
     }
 
-    func transcribeSelected(configuration: WhisperConfiguration) async {
+    func transcribeSelected(
+        configuration: WhisperConfiguration,
+        summaryConfiguration: LlamaSummaryConfiguration
+    ) async {
         guard let item = selectedRecording else {
             statusMessage = "Select a recording to transcribe."
             return
         }
 
         do {
-            try enqueueTranscription(audioURL: item.audioURL, configuration: configuration)
+            try enqueueTranscription(
+                audioURL: item.audioURL,
+                configuration: configuration,
+                summaryConfiguration: summaryConfiguration
+            )
             statusMessage = "Queued transcription for \(item.audioURL.lastPathComponent)"
         } catch {
             statusMessage = error.localizedDescription
@@ -266,6 +284,7 @@ final class RecorderViewModel: ObservableObject {
                 try loadTranscript(for: next)
             } else {
                 selectedTranscript = "No transcript selected."
+                selectedSummary = "No summary selected."
             }
 
             statusMessage = "Deleted \(recording.audioURL.lastPathComponent)"
@@ -300,6 +319,7 @@ final class RecorderViewModel: ObservableObject {
                 try loadTranscript(for: next)
             } else {
                 selectedTranscript = "No transcript selected."
+                selectedSummary = "No summary selected."
             }
 
             statusMessage = "Deleted \(targets.count) recording(s)."
@@ -412,6 +432,7 @@ final class RecorderViewModel: ObservableObject {
                 try loadTranscript(for: importedItem)
             } catch {
                 selectedTranscript = error.localizedDescription
+                selectedSummary = "No summary selected."
             }
         }
 
@@ -483,7 +504,11 @@ final class RecorderViewModel: ObservableObject {
         recalculateQueueState()
     }
 
-    private func enqueueTranscription(audioURL: URL, configuration: WhisperConfiguration) throws {
+    private func enqueueTranscription(
+        audioURL: URL,
+        configuration: WhisperConfiguration,
+        summaryConfiguration: LlamaSummaryConfiguration
+    ) throws {
         let modelPath = configuration.modelPath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !modelPath.isEmpty else {
             throw WhisperTranscriptionError.invalidModelPath("(empty)")
@@ -503,7 +528,9 @@ final class RecorderViewModel: ObservableObject {
         let job = TranscriptionJob(
             audioPath: audioURL.path,
             modelPath: modelPath,
-            language: normalizedLanguage
+            language: normalizedLanguage,
+            summaryEmbeddingModelPath: summaryConfiguration.embeddingModelPath.trimmingCharacters(in: .whitespacesAndNewlines),
+            summaryModelPath: summaryConfiguration.summaryModelPath.trimmingCharacters(in: .whitespacesAndNewlines)
         )
         transcriptionQueue.append(job)
         try persistQueue()
@@ -540,11 +567,28 @@ final class RecorderViewModel: ObservableObject {
                 )
 
                 try markJobStatus(nextJob.id, status: .completed, errorMessage: nil)
+                let summaryOutcome = try await summarizeIfConfigured(
+                    job: nextJob,
+                    transcriptText: result.transcriptText
+                )
                 try reloadRecordings()
                 if selectedRecordingID == nextJob.audioPath {
                     selectedTranscript = result.transcriptText
+                    switch summaryOutcome {
+                    case .generated(let summary):
+                        selectedSummary = summary.summaryText
+                    case .skipped(let message), .failed(let message):
+                        selectedSummary = message
+                    }
                 }
-                statusMessage = "Transcript saved to \(result.transcriptURL.lastPathComponent)"
+                switch summaryOutcome {
+                case .generated(let summary):
+                    statusMessage = "Transcript and summary saved to \(result.transcriptURL.lastPathComponent) and \(summary.summaryURL.lastPathComponent)"
+                case .skipped(let message):
+                    statusMessage = "Transcript saved to \(result.transcriptURL.lastPathComponent). \(message)"
+                case .failed(let message):
+                    statusMessage = "Transcript saved to \(result.transcriptURL.lastPathComponent), but summary failed: \(message)"
+                }
             } catch {
                 do {
                     try markJobStatus(nextJob.id, status: .failed, errorMessage: error.localizedDescription)
@@ -615,6 +659,8 @@ final class RecorderViewModel: ObservableObject {
                 audioPath: newPath,
                 modelPath: transcriptionQueue[index].modelPath,
                 language: transcriptionQueue[index].language,
+                summaryEmbeddingModelPath: transcriptionQueue[index].summaryEmbeddingModelPath,
+                summaryModelPath: transcriptionQueue[index].summaryModelPath,
                 status: transcriptionQueue[index].status,
                 errorMessage: transcriptionQueue[index].errorMessage,
                 createdAt: transcriptionQueue[index].createdAt,
@@ -627,6 +673,7 @@ final class RecorderViewModel: ObservableObject {
 
     private func loadTranscript(for item: RecordingItem) throws {
         selectedTranscript = try store.loadTranscript(for: item)
+        selectedSummary = try store.loadSummary(for: item)
     }
 
     private func scheduleLiveUpdates() {
@@ -665,6 +712,7 @@ final class RecorderViewModel: ObservableObject {
                 selectedRecordingIDs = [activeRecordingURL.path]
                 selectedRecordingID = activeRecordingURL.path
                 statusMessage = "Saved recording and transcript."
+                selectedSummary = "Summary will be generated after final transcription finishes."
                 self.liveSession = nil
             } else {
                 statusMessage = "Recording and updating transcript..."
@@ -726,4 +774,52 @@ final class RecorderViewModel: ObservableObject {
             try session.transcribeLive(audioURL: audioURL, finalPass: finalPass)
         }.value
     }
+
+    private func summarizeIfConfigured(
+        job: TranscriptionJob,
+        transcriptText: String
+    ) async throws -> SummaryOutcome {
+        let configuration = LlamaSummaryConfiguration(
+            embeddingModelPath: job.summaryEmbeddingModelPath,
+            summaryModelPath: job.summaryModelPath
+        )
+
+        guard configuration.isConfigured else {
+            return .skipped("Summary skipped because llama.cpp summary settings are incomplete.")
+        }
+
+        statusMessage = "Summarizing \(URL(fileURLWithPath: job.audioPath).lastPathComponent)..."
+
+        do {
+            let summary = try await summarizeInBackground(
+                audioURL: URL(fileURLWithPath: job.audioPath),
+                transcriptText: transcriptText,
+                configuration: configuration
+            )
+            return .generated(summary)
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    private func summarizeInBackground(
+        audioURL: URL,
+        transcriptText: String,
+        configuration: LlamaSummaryConfiguration
+    ) async throws -> SummaryResult {
+        try await Task.detached(priority: .userInitiated) {
+            let service = LlamaSummaryService()
+            return try service.summarize(
+                transcriptText: transcriptText,
+                audioURL: audioURL,
+                configuration: configuration
+            )
+        }.value
+    }
+}
+
+private enum SummaryOutcome {
+    case generated(SummaryResult)
+    case skipped(String)
+    case failed(String)
 }

@@ -69,6 +69,11 @@ struct TranscriptStore {
         return audioURL.deletingLastPathComponent().appendingPathComponent("\(stem)-transcript.json")
     }
 
+    func summaryURL(for audioURL: URL) -> URL {
+        let stem = audioURL.deletingPathExtension().lastPathComponent
+        return audioURL.deletingLastPathComponent().appendingPathComponent("\(stem)-summary.txt")
+    }
+
     func loadRecordings() throws -> [RecordingItem] {
         try ensureDirectories()
 
@@ -83,9 +88,11 @@ struct TranscriptStore {
             .map { audioURL in
                 let values = try audioURL.resourceValues(forKeys: [.creationDateKey])
                 let transcriptURL = transcriptURL(for: audioURL)
+                let summaryURL = summaryURL(for: audioURL)
                 return RecordingItem(
                     audioURL: audioURL,
                     transcriptURL: fileManager.fileExists(atPath: transcriptURL.path) ? transcriptURL : nil,
+                    summaryURL: fileManager.fileExists(atPath: summaryURL.path) ? summaryURL : nil,
                     createdAt: values.creationDate ?? .distantPast
                 )
             }
@@ -100,6 +107,14 @@ struct TranscriptStore {
         return try String(contentsOf: transcriptURL, encoding: .utf8)
     }
 
+    func loadSummary(for item: RecordingItem) throws -> String {
+        guard let summaryURL = item.summaryURL else {
+            return "No summary yet."
+        }
+
+        return try String(contentsOf: summaryURL, encoding: .utf8)
+    }
+
     func deleteRecording(_ item: RecordingItem) throws {
         if fileManager.fileExists(atPath: item.audioURL.path) {
             try fileManager.removeItem(at: item.audioURL)
@@ -107,6 +122,10 @@ struct TranscriptStore {
 
         if let transcriptURL = item.transcriptURL, fileManager.fileExists(atPath: transcriptURL.path) {
             try fileManager.removeItem(at: transcriptURL)
+        }
+
+        if let summaryURL = item.summaryURL, fileManager.fileExists(atPath: summaryURL.path) {
+            try fileManager.removeItem(at: summaryURL)
         }
 
         let transcriptJSONURL = transcriptJSONURL(for: item.audioURL)
@@ -153,8 +172,10 @@ struct TranscriptStore {
 
         let oldTranscriptURL = transcriptURL(for: oldAudioURL)
         let oldTranscriptJSONURL = transcriptJSONURL(for: oldAudioURL)
+        let oldSummaryURL = summaryURL(for: oldAudioURL)
         let newTranscriptURL = transcriptURL(for: newAudioURL)
         let newTranscriptJSONURL = transcriptJSONURL(for: newAudioURL)
+        let newSummaryURL = summaryURL(for: newAudioURL)
 
         try fileManager.moveItem(at: oldAudioURL, to: newAudioURL)
 
@@ -164,6 +185,9 @@ struct TranscriptStore {
             }
             if fileManager.fileExists(atPath: oldTranscriptJSONURL.path) {
                 try fileManager.moveItem(at: oldTranscriptJSONURL, to: newTranscriptJSONURL)
+            }
+            if fileManager.fileExists(atPath: oldSummaryURL.path) {
+                try fileManager.moveItem(at: oldSummaryURL, to: newSummaryURL)
             }
             return newAudioURL
         } catch {

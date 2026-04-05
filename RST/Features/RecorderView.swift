@@ -39,7 +39,8 @@ struct RecorderView: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Local Whisper")
                         .font(.title2.bold())
@@ -384,8 +385,10 @@ struct RecorderView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(20)
+            .frame(minWidth: 340, alignment: .topLeading)
         }
-        .padding(20)
         .frame(minWidth: 340, maxHeight: .infinity, alignment: .topLeading)
         .alert("Delete recording?", isPresented: $isShowingDeleteConfirmation) {
             Button("Delete", role: .destructive) {

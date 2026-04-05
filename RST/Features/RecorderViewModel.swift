@@ -197,6 +197,48 @@ final class RecorderViewModel: ObservableObject {
         }
     }
 
+    func summarizeSelected(summaryConfiguration: LlamaSummaryConfiguration) async {
+        guard let item = selectedRecording else {
+            statusMessage = "Select a recording to summarize."
+            return
+        }
+
+        guard item.transcriptURL != nil else {
+            statusMessage = "Transcribe this recording before generating a summary."
+            return
+        }
+
+        let configuration = LlamaSummaryConfiguration(
+            embeddingModelPath: summaryConfiguration.embeddingModelPath.trimmingCharacters(in: .whitespacesAndNewlines),
+            summaryModelPath: summaryConfiguration.summaryModelPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+
+        guard configuration.isConfigured else {
+            statusMessage = "Summary failed: llama.cpp summary settings are incomplete."
+            return
+        }
+
+        isTranscribing = true
+        statusMessage = "Summarizing \(item.audioURL.lastPathComponent)..."
+        defer {
+            isTranscribing = false
+        }
+
+        do {
+            let transcriptText = try store.loadTranscript(for: item)
+            let summary = try await summarizeInBackground(
+                audioURL: item.audioURL,
+                transcriptText: transcriptText,
+                configuration: configuration
+            )
+            try reloadRecordings()
+            selectedSummary = summary.summaryText
+            statusMessage = "Summary saved to \(summary.summaryURL.lastPathComponent)"
+        } catch {
+            statusMessage = "Summary failed for \(item.audioURL.lastPathComponent): \(error.localizedDescription)"
+        }
+    }
+
     func revealAudio() {
         guard let url = selectedRecording?.audioURL else {
             statusMessage = "Select a recording first."

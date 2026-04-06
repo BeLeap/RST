@@ -295,6 +295,38 @@ final class RecorderViewModel: ObservableObject {
         exportItem(at: transcriptURL, to: destination)
     }
 
+    func exportAll() {
+        guard let recording = selectedRecording else {
+            statusMessage = "Select a recording first."
+            return
+        }
+
+        guard let transcriptURL = recording.transcriptURL else {
+            statusMessage = "Cannot export all artifacts because transcript text is missing."
+            return
+        }
+
+        guard let summaryURL = recording.summaryURL else {
+            statusMessage = "Cannot export all artifacts because summary text is missing."
+            return
+        }
+
+        guard let destinationDirectory = PanelPicker.chooseDirectory(title: "Choose Export Folder for All Files") else {
+            return
+        }
+
+        do {
+            try exportItems([
+                recording.audioURL,
+                transcriptURL,
+                summaryURL
+            ], to: destinationDirectory)
+            statusMessage = "Exported all artifacts for \(recording.audioURL.lastPathComponent)"
+        } catch {
+            statusMessage = "Export failed: \(error.localizedDescription)"
+        }
+    }
+
     func deleteSelectedRecording() {
         guard !selectedRecordingIDs.isEmpty else {
             statusMessage = "Select a recording first."
@@ -770,14 +802,25 @@ final class RecorderViewModel: ObservableObject {
 
     private func exportItem(at sourceURL: URL, to destinationURL: URL) {
         do {
-            if FileManager.default.fileExists(atPath: destinationURL.path) {
-                try FileManager.default.removeItem(at: destinationURL)
-            }
-            try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+            try copyItemReplacingDestination(at: sourceURL, to: destinationURL)
             statusMessage = "Exported \(sourceURL.lastPathComponent)"
         } catch {
             statusMessage = error.localizedDescription
         }
+    }
+
+    private func exportItems(_ sourceURLs: [URL], to destinationDirectory: URL) throws {
+        for sourceURL in sourceURLs {
+            let destinationURL = destinationDirectory.appendingPathComponent(sourceURL.lastPathComponent, isDirectory: false)
+            try copyItemReplacingDestination(at: sourceURL, to: destinationURL)
+        }
+    }
+
+    private func copyItemReplacingDestination(at sourceURL: URL, to destinationURL: URL) throws {
+        if FileManager.default.fileExists(atPath: destinationURL.path) {
+            try FileManager.default.removeItem(at: destinationURL)
+        }
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
     }
 
     private func firstRecordingID(in ids: Set<RecordingItem.ID>) -> RecordingItem.ID? {

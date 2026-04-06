@@ -360,6 +360,12 @@ struct RecorderView: View {
                                     viewModel.exportTranscript()
                                 }
                                 .disabled(item.transcriptURL == nil)
+
+                                Button("Export All") {
+                                    viewModel.selectRecording(id: item.id)
+                                    viewModel.exportAll()
+                                }
+                                .disabled(item.transcriptURL == nil || item.summaryURL == nil)
                             }
                         }
 

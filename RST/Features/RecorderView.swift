@@ -391,6 +391,7 @@ struct RecorderView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+
             }
             .padding(20)
             .frame(minWidth: 340, alignment: .topLeading)

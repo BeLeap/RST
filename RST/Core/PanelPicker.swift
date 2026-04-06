@@ -20,4 +20,15 @@ enum PanelPicker {
         panel.allowedFileTypes = allowedFileTypes
         return panel.runModal() == .OK ? panel.url : nil
     }
+
+    static func chooseDirectory(title: String) -> URL? {
+        let panel = NSOpenPanel()
+        panel.title = title
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
 }

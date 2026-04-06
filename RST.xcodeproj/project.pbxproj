@@ -25,6 +25,7 @@
 		A1000000000000000000002F /* llama.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* llama.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A10000000000000000000034 /* LlamaModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000035 /* LlamaModelStore.swift */; };
 		A10000000000000000000036 /* ModelFileDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000037 /* ModelFileDownloader.swift */; };
+		A10000000000000000000038 /* LiveChunkOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000039 /* LiveChunkOverlayController.swift */; };
 		A10000000000000000000027 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -65,6 +66,7 @@
 		A1000000000000000000002E /* llama.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = llama.xcframework; path = Vendor/llama.cpp/build-apple/llama.xcframework; sourceTree = SOURCE_ROOT; };
 		A10000000000000000000035 /* LlamaModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LlamaModelStore.swift; sourceTree = "<group>"; };
 		A10000000000000000000037 /* ModelFileDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelFileDownloader.swift; sourceTree = "<group>"; };
+		A10000000000000000000039 /* LiveChunkOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChunkOverlayController.swift; sourceTree = "<group>"; };
 		A10000000000000000000028 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -127,6 +129,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000011 /* RSTApp.swift */,
+				A10000000000000000000039 /* LiveChunkOverlayController.swift */,
 				A10000000000000000000019 /* Info.plist */,
 				A10000000000000000000028 /* Assets.xcassets */,
 			);
@@ -244,6 +247,7 @@
 				A1000000000000000000002B /* LlamaSummaryService.swift in Sources */,
 				A10000000000000000000034 /* LlamaModelStore.swift in Sources */,
 				A10000000000000000000036 /* ModelFileDownloader.swift in Sources */,
+				A10000000000000000000038 /* LiveChunkOverlayController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

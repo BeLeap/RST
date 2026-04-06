@@ -16,6 +16,7 @@ final class RecorderViewModel: ObservableObject {
     @Published private(set) var statusMessage = "Ready."
     @Published private(set) var queuedJobCount = 0
     @Published private(set) var runningJobID: UUID?
+    @Published private(set) var liveChunkTranscript = "Live chunk transcript will appear while recording."
 
     private let store: TranscriptStore
     private let recorder: AudioRecorderService
@@ -134,6 +135,7 @@ final class RecorderViewModel: ObservableObject {
             isRecording = true
             selectedTranscript = "Listening..."
             selectedSummary = "Summary will be generated after recording stops."
+            liveChunkTranscript = "Listening for chunk updates..."
             scheduleLiveUpdates()
             if let modelErrorMessage {
                 statusMessage = "Recording to \(url.lastPathComponent). \(modelErrorMessage)"
@@ -158,6 +160,7 @@ final class RecorderViewModel: ObservableObject {
             let url = try recorder.stopRecording()
             activeRecordingURL = url
             isRecording = false
+            liveChunkTranscript = "Live chunk transcript will appear while recording."
             try reloadRecordings()
             selectedRecordingIDs = [url.path]
             selectedRecordingID = url.path
@@ -781,6 +784,11 @@ final class RecorderViewModel: ObservableObject {
                 finalPass: finalPass
             )
             selectedTranscript = result.transcriptText.isEmpty ? "Listening..." : result.transcriptText
+            if finalPass {
+                liveChunkTranscript = "Live chunk transcript will appear while recording."
+            } else {
+                liveChunkTranscript = result.liveChunkText ?? "Listening for chunk updates..."
+            }
             if finalPass {
                 try reloadRecordings()
                 selectedRecordingIDs = [activeRecordingURL.path]

@@ -29,6 +29,7 @@ struct WhisperConfiguration: Sendable {
 struct TranscriptionResult: Sendable {
     let transcriptURL: URL
     let transcriptText: String
+    let liveChunkText: String?
 }
 
 private struct WhisperSegment {
@@ -104,7 +105,7 @@ final class WhisperTranscriptionSession: @unchecked Sendable {
         guard !samples.isEmpty else {
             let transcriptURL = store.transcriptURL(for: audioURL)
             try "".write(to: transcriptURL, atomically: true, encoding: .utf8)
-            return TranscriptionResult(transcriptURL: transcriptURL, transcriptText: "")
+            return TranscriptionResult(transcriptURL: transcriptURL, transcriptText: "", liveChunkText: nil)
         }
 
         let transcriptText = try context.transcribe(samples: samples, language: language)
@@ -113,7 +114,8 @@ final class WhisperTranscriptionSession: @unchecked Sendable {
 
         return TranscriptionResult(
             transcriptURL: transcriptURL,
-            transcriptText: transcriptText
+            transcriptText: transcriptText,
+            liveChunkText: nil
         )
     }
 
@@ -128,13 +130,18 @@ final class WhisperTranscriptionSession: @unchecked Sendable {
         guard !samples.isEmpty else {
             liveCommittedSegments = []
             try "".write(to: transcriptURL, atomically: true, encoding: .utf8)
-            return TranscriptionResult(transcriptURL: transcriptURL, transcriptText: "")
+            return TranscriptionResult(transcriptURL: transcriptURL, transcriptText: "", liveChunkText: nil)
         }
 
         let lastCommittedSample = liveCommittedSegments.last?.endSample ?? 0
         let chunkStartSample = max(0, lastCommittedSample - Self.liveOverlapSampleCount)
         let chunkSamples = Array(samples[chunkStartSample..<samples.count])
         let decodedSegments = try context.transcribeSegments(samples: chunkSamples, language: language)
+        let liveChunkText = decodedSegments
+            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let absoluteSegments = makeAbsoluteSegments(decodedSegments, chunkStartSample: chunkStartSample, totalSampleCount: samples.count)
 
         let stableCutoffSample = finalPass
@@ -152,7 +159,11 @@ final class WhisperTranscriptionSession: @unchecked Sendable {
         let transcriptText = joinSegments(visibleSegments)
 
         try transcriptText.write(to: transcriptURL, atomically: true, encoding: .utf8)
-        return TranscriptionResult(transcriptURL: transcriptURL, transcriptText: transcriptText)
+        return TranscriptionResult(
+            transcriptURL: transcriptURL,
+            transcriptText: transcriptText,
+            liveChunkText: liveChunkText.isEmpty ? nil : liveChunkText
+        )
     }
 
     private func makeAbsoluteSegments(

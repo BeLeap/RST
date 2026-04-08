@@ -133,16 +133,28 @@ final class RecorderViewModel: ObservableObject {
             try recorder.startRecording(to: url)
             activeRecordingURL = url
             isRecording = true
-            selectedTranscript = "Listening..."
-            selectedSummary = "Summary will be generated after recording stops."
             liveChunkTranscript = "Listening for chunk updates..."
             scheduleLiveUpdates()
+            var filesRefreshErrorDetail: String?
+            do {
+                try reloadRecordings()
+                selectedRecordingIDs = [url.path]
+                selectedRecordingID = url.path
+                if let recordingItem = selectedRecording {
+                    try loadTranscript(for: recordingItem)
+                } else {
+                    selectedTranscript = "No transcript selected."
+                    selectedSummary = "No summary selected."
+                }
+            } catch {
+                filesRefreshErrorDetail = " Failed to refresh Files list: \(error.localizedDescription)"
+            }
             if let modelErrorMessage {
-                statusMessage = "Recording to \(url.lastPathComponent). \(modelErrorMessage)"
+                statusMessage = "Recording to \(url.lastPathComponent). \(modelErrorMessage)\(filesRefreshErrorDetail ?? "")"
             } else if liveSession == nil {
-                statusMessage = "Recording to \(url.lastPathComponent). Live transcription is unavailable until a valid model path is set."
+                statusMessage = "Recording to \(url.lastPathComponent). Live transcription is unavailable until a valid model path is set.\(filesRefreshErrorDetail ?? "")"
             } else {
-                statusMessage = "Recording to \(url.lastPathComponent). Live transcription is active."
+                statusMessage = "Recording to \(url.lastPathComponent). Live transcription is active.\(filesRefreshErrorDetail ?? "")"
             }
         } catch {
             statusMessage = error.localizedDescription
@@ -783,7 +795,6 @@ final class RecorderViewModel: ObservableObject {
                 audioURL: activeRecordingURL,
                 finalPass: finalPass
             )
-            selectedTranscript = result.transcriptText.isEmpty ? "Listening..." : result.transcriptText
             if finalPass {
                 liveChunkTranscript = "Live chunk transcript will appear while recording."
             } else {

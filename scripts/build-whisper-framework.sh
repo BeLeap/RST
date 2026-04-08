@@ -1,7 +1,8 @@
 #!/bin/zsh
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="${0:A:h}"
+ROOT_DIR="${SCRIPT_DIR:h}"
 VENDOR_DIR="$ROOT_DIR/Vendor/whisper.cpp"
 BUILD_DIR="$VENDOR_DIR/build-macos-only"
 OUTPUT_DIR="$VENDOR_DIR/build-apple"
@@ -13,6 +14,7 @@ FRAMEWORK_HEADERS_DIR="$FRAMEWORK_DIR/Versions/A/Headers"
 FRAMEWORK_MODULES_DIR="$FRAMEWORK_DIR/Versions/A/Modules"
 FRAMEWORK_RESOURCES_DIR="$FRAMEWORK_DIR/Versions/A/Resources"
 FRAMEWORK_BINARY="$FRAMEWORK_DIR/Versions/A/whisper"
+SUBMODULE_PATH="${VENDOR_DIR#$ROOT_DIR/}"
 
 export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
@@ -20,6 +22,25 @@ export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 CLANG="$(xcrun --sdk macosx --find clang)"
 CLANGXX="$(xcrun --sdk macosx --find clang++)"
 SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+
+ensure_vendor_checkout() {
+  if [[ -f "$VENDOR_DIR/CMakeLists.txt" ]]; then
+    return
+  fi
+
+  if [[ -e "$ROOT_DIR/.gitmodules" ]] && command -v git >/dev/null 2>&1; then
+    echo "Missing $SUBMODULE_PATH, attempting to initialize submodule"
+    git -C "$ROOT_DIR" submodule update --init --recursive "$SUBMODULE_PATH"
+  fi
+
+  if [[ ! -f "$VENDOR_DIR/CMakeLists.txt" ]]; then
+    echo "Expected vendor source at $VENDOR_DIR but it is missing." >&2
+    echo "Ensure the repository is checked out with submodules." >&2
+    exit 1
+  fi
+}
+
+ensure_vendor_checkout
 
 cd "$VENDOR_DIR"
 rm -rf "$BUILD_DIR" "$OUTPUT_DIR"

@@ -25,7 +25,32 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
         with:
+          fetch-depth: 0
           submodules: recursive
+
+      - name: Sync and verify submodules
+        run: |
+          git submodule status --recursive || true
+          git submodule sync --recursive
+          git submodule update --init --recursive
+          if [[ ! -f Vendor/whisper.cpp/CMakeLists.txt ]]; then
+            whisper_url="$(git config -f .gitmodules --get submodule.Vendor/whisper.cpp.url)"
+            whisper_rev="$(git rev-parse HEAD:Vendor/whisper.cpp)"
+            rm -rf Vendor/whisper.cpp
+            git clone "$whisper_url" Vendor/whisper.cpp
+            git -C Vendor/whisper.cpp checkout "$whisper_rev"
+          fi
+          if [[ ! -f Vendor/llama.cpp/CMakeLists.txt ]]; then
+            llama_url="$(git config -f .gitmodules --get submodule.Vendor/llama.cpp.url)"
+            llama_rev="$(git rev-parse HEAD:Vendor/llama.cpp)"
+            rm -rf Vendor/llama.cpp
+            git clone "$llama_url" Vendor/llama.cpp
+            git -C Vendor/llama.cpp checkout "$llama_rev"
+          fi
+          git submodule status --recursive || true
+          ls -la Vendor
+          test -f Vendor/whisper.cpp/CMakeLists.txt
+          test -f Vendor/llama.cpp/CMakeLists.txt
 
       - name: Build embedded whisper framework
         run: ./scripts/build-whisper-framework.sh

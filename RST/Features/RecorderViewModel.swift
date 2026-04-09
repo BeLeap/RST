@@ -672,11 +672,11 @@ final class RecorderViewModel: ObservableObject {
                 }
                 switch summaryOutcome {
                 case .generated(let summary):
-                    statusMessage = "Transcript and summary saved to \(result.transcriptURL.lastPathComponent) and \(summary.summaryURL.lastPathComponent)"
+                    statusMessage = "Transcript and summary saved to \(result.transcriptURL.lastPathComponent) and \(summary.summaryURL.lastPathComponent)\(warningSuffix(for: result.warnings))"
                 case .skipped(let message):
-                    statusMessage = "Transcript saved to \(result.transcriptURL.lastPathComponent). \(message)"
+                    statusMessage = "Transcript saved to \(result.transcriptURL.lastPathComponent). \(message)\(warningSuffix(for: result.warnings))"
                 case .failed(let message):
-                    statusMessage = "Transcript saved to \(result.transcriptURL.lastPathComponent), but summary failed: \(message)"
+                    statusMessage = "Transcript saved to \(result.transcriptURL.lastPathComponent), but summary failed: \(message)\(warningSuffix(for: result.warnings))"
                 }
             } catch {
                 do {
@@ -804,11 +804,11 @@ final class RecorderViewModel: ObservableObject {
                 try reloadRecordings()
                 selectedRecordingIDs = [activeRecordingURL.path]
                 selectedRecordingID = activeRecordingURL.path
-                statusMessage = "Saved recording and transcript."
+                statusMessage = "Saved recording and transcript.\(warningSuffix(for: result.warnings))"
                 selectedSummary = "Summary will be generated after final transcription finishes."
                 self.liveSession = nil
             } else {
-                statusMessage = "Recording and updating transcript..."
+                statusMessage = "Recording and updating transcript...\(warningSuffix(for: result.warnings))"
             }
         } catch {
             statusMessage = finalPass
@@ -877,6 +877,14 @@ final class RecorderViewModel: ObservableObject {
         try await Task.detached(priority: .userInitiated) {
             try session.transcribeLive(audioURL: audioURL, finalPass: finalPass)
         }.value
+    }
+
+    private func warningSuffix(for warnings: [String]) -> String {
+        guard !warnings.isEmpty else {
+            return ""
+        }
+
+        return " Warning: \(warnings.joined(separator: " | "))"
     }
 
     private func summarizeIfConfigured(

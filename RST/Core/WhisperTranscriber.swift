@@ -30,6 +30,7 @@ struct TranscriptionResult: Sendable {
     let transcriptURL: URL
     let transcriptText: String
     let liveChunkText: String?
+    let warnings: [String]
 }
 
 private struct WhisperSegment {
@@ -42,6 +43,11 @@ private struct LiveTranscriptSegment {
     let startSample: Int
     let endSample: Int
     let text: String
+}
+
+private struct RepetitionIssue: Sendable {
+    let repeatedText: String
+    let consecutiveCount: Int
 }
 
 struct WhisperTranscriber {
@@ -105,17 +111,20 @@ final class WhisperTranscriptionSession: @unchecked Sendable {
         guard !samples.isEmpty else {
             let transcriptURL = store.transcriptURL(for: audioURL)
             try "".write(to: transcriptURL, atomically: true, encoding: .utf8)
-            return TranscriptionResult(transcriptURL: transcriptURL, transcriptText: "", liveChunkText: nil)
+            return TranscriptionResult(transcriptURL: transcriptURL, transcriptText: "", liveChunkText: nil, warnings: [])
         }
 
-        let transcriptText = try context.transcribe(samples: samples, language: language)
+        let decodedSegments = try context.transcribeSegments(samples: samples, language: language)
+        let warning = repetitionWarningMessage(for: decodedSegments.map(\.text))
+        let transcriptText = joinWhisperSegmentsRemovingConsecutiveDuplicates(decodedSegments)
         let transcriptURL = store.transcriptURL(for: audioURL)
         try transcriptText.write(to: transcriptURL, atomically: true, encoding: String.Encoding.utf8)
 
         return TranscriptionResult(
             transcriptURL: transcriptURL,
             transcriptText: transcriptText,
-            liveChunkText: nil
+            liveChunkText: nil,
+            warnings: warning.map { [$0] } ?? []
         )
     }
 
@@ -130,13 +139,14 @@ final class WhisperTranscriptionSession: @unchecked Sendable {
         guard !samples.isEmpty else {
             liveCommittedSegments = []
             try "".write(to: transcriptURL, atomically: true, encoding: .utf8)
-            return TranscriptionResult(transcriptURL: transcriptURL, transcriptText: "", liveChunkText: nil)
+            return TranscriptionResult(transcriptURL: transcriptURL, transcriptText: "", liveChunkText: nil, warnings: [])
         }
 
         let lastCommittedSample = liveCommittedSegments.last?.endSample ?? 0
         let chunkStartSample = max(0, lastCommittedSample - Self.liveOverlapSampleCount)
         let chunkSamples = Array(samples[chunkStartSample..<samples.count])
         let decodedSegments = try context.transcribeSegments(samples: chunkSamples, language: language)
+        let warning = repetitionWarningMessage(for: decodedSegments.map(\.text))
         let liveChunkText = decodedSegments
             .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -156,13 +166,14 @@ final class WhisperTranscriptionSession: @unchecked Sendable {
         let visibleSegments = finalPass
             ? liveCommittedSegments
             : mergeSegments(liveCommittedSegments + previewSegments)
-        let transcriptText = joinSegments(visibleSegments)
+        let transcriptText = joinSegments(removingConsecutiveDuplicates(from: visibleSegments))
 
         try transcriptText.write(to: transcriptURL, atomically: true, encoding: .utf8)
         return TranscriptionResult(
             transcriptURL: transcriptURL,
             transcriptText: transcriptText,
-            liveChunkText: liveChunkText.isEmpty ? nil : liveChunkText
+            liveChunkText: liveChunkText.isEmpty ? nil : liveChunkText,
+            warnings: warning.map { [$0] } ?? []
         )
     }
 
@@ -216,6 +227,113 @@ final class WhisperTranscriptionSession: @unchecked Sendable {
     private func joinSegments(_ segments: [LiveTranscriptSegment]) -> String {
         segments
             .map(\.text)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func joinWhisperSegmentsRemovingConsecutiveDuplicates(_ segments: [WhisperSegment]) -> String {
+        removingConsecutiveDuplicateTexts(segments.map(\.text))
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func removingConsecutiveDuplicates(from segments: [LiveTranscriptSegment]) -> [LiveTranscriptSegment] {
+        var deduplicated: [LiveTranscriptSegment] = []
+        deduplicated.reserveCapacity(segments.count)
+
+        var previousKey: String?
+        for segment in segments {
+            let key = canonicalTextKey(for: segment.text)
+            guard !key.isEmpty else {
+                continue
+            }
+
+            if key == previousKey {
+                continue
+            }
+
+            deduplicated.append(segment)
+            previousKey = key
+        }
+
+        return deduplicated
+    }
+
+    private func removingConsecutiveDuplicateTexts(_ texts: [String]) -> [String] {
+        var deduplicated: [String] = []
+        deduplicated.reserveCapacity(texts.count)
+
+        var previousKey: String?
+        for text in texts {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = canonicalTextKey(for: trimmed)
+            guard !key.isEmpty else {
+                continue
+            }
+
+            if key == previousKey {
+                continue
+            }
+
+            deduplicated.append(trimmed)
+            previousKey = key
+        }
+
+        return deduplicated
+    }
+
+    private func repetitionWarningMessage(for texts: [String]) -> String? {
+        guard let issue = detectPathologicalRepetition(in: texts) else {
+            return nil
+        }
+        return "Detected repeated Whisper segment (\(issue.consecutiveCount)x): \"\(issue.repeatedText)\". Duplicates were collapsed in transcript output."
+    }
+
+    private func detectPathologicalRepetition(in texts: [String]) -> RepetitionIssue? {
+        let minimumCharactersToFlag = 12
+        let repetitionThreshold = 6
+
+        var previousKey: String?
+        var previousText: String?
+        var consecutiveCount = 0
+
+        for text in texts {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = canonicalTextKey(for: trimmed)
+            guard !key.isEmpty else {
+                continue
+            }
+
+            if key.count < minimumCharactersToFlag {
+                previousKey = key
+                previousText = trimmed
+                consecutiveCount = 1
+                continue
+            }
+
+            if key == previousKey {
+                consecutiveCount += 1
+            } else {
+                previousKey = key
+                previousText = trimmed
+                consecutiveCount = 1
+            }
+
+            if consecutiveCount >= repetitionThreshold {
+                return RepetitionIssue(
+                    repeatedText: previousText ?? trimmed,
+                    consecutiveCount: consecutiveCount
+                )
+            }
+        }
+
+        return nil
+    }
+
+    private func canonicalTextKey(for text: String) -> String {
+        text
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }

@@ -267,128 +267,122 @@ struct RecorderView: View {
                     }
                 }
 
-                Divider()
-
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("Files")
-                            .font(.title3.bold())
-                        Spacer()
-                        if viewModel.queuedJobCount > 0 {
-                            Text("Queue: \(viewModel.queuedJobCount)")
+                ZStack(alignment: .topTrailing) {
+                    List(viewModel.recordings, selection: Binding(
+                        get: { viewModel.selectedRecordingIDs },
+                        set: { viewModel.setSelectedRecordings(ids: $0) }
+                    )) { item in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.title)
+                                .font(.headline)
+                            Text(item.createdAt.formatted(date: .abbreviated, time: .standard))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            Text(viewModel.transcriptionStatusText(for: item))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                        .contentShape(Rectangle())
+                        .contextMenu {
+                            Button("Rename…") {
+                                viewModel.selectRecording(id: item.id)
+                                viewModel.renameRecording(id: item.id)
+                            }
+
+                            Button("Delete", role: .destructive) {
+                                if viewModel.selectedRecordingIDs.contains(item.id),
+                                   viewModel.selectedRecordingIDs.count > 1 {
+                                    pendingDeleteRecordingID = nil
+                                    isShowingDeleteConfirmation = true
+                                } else {
+                                    viewModel.selectRecording(id: item.id)
+                                    pendingDeleteRecordingID = item.id
+                                    isShowingDeleteConfirmation = true
+                                }
+                            }
+
+                            Divider()
+
+                            Button("Transcribe") {
+                                viewModel.selectRecording(id: item.id)
+                                Task {
+                                    await viewModel.transcribeSelected(
+                                        configuration: batchWhisperConfiguration,
+                                        summaryConfiguration: llamaSummaryConfiguration
+                                    )
+                                }
+                            }
+                            .disabled(viewModel.isRecording)
+
+                            Button("Summarize") {
+                                viewModel.selectRecording(id: item.id)
+                                Task {
+                                    await viewModel.summarizeSelected(
+                                        summaryConfiguration: llamaSummaryConfiguration
+                                    )
+                                }
+                            }
+                            .disabled(viewModel.isRecording || item.transcriptURL == nil)
+
+                            Button("Reveal Audio") {
+                                viewModel.selectRecording(id: item.id)
+                                viewModel.revealAudio()
+                            }
+
+                            Button("Reveal Transcript") {
+                                viewModel.selectRecording(id: item.id)
+                                viewModel.revealTranscript()
+                            }
+                            .disabled(item.transcriptURL == nil)
+
+                            Button("Export Audio") {
+                                viewModel.selectRecording(id: item.id)
+                                viewModel.exportAudio()
+                            }
+
+                            Button("Export Transcript") {
+                                viewModel.selectRecording(id: item.id)
+                                viewModel.exportTranscript()
+                            }
+                            .disabled(item.transcriptURL == nil)
+
+                            Button("Export All") {
+                                viewModel.selectRecording(id: item.id)
+                                viewModel.exportAll()
+                            }
+                            .disabled(item.transcriptURL == nil || item.summaryURL == nil)
                         }
                     }
 
-                    ZStack {
-                        List(viewModel.recordings, selection: Binding(
-                            get: { viewModel.selectedRecordingIDs },
-                            set: { viewModel.setSelectedRecordings(ids: $0) }
-                        )) { item in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.title)
+                    if isFileDropTargeted {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6]))
+                            )
+                            .overlay(
+                                Text("Drop WAV files to import")
                                     .font(.headline)
-                                Text(item.createdAt.formatted(date: .abbreviated, time: .standard))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text(viewModel.transcriptionStatusText(for: item))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
-                            .contentShape(Rectangle())
-                            .contextMenu {
-                                Button("Rename…") {
-                                    viewModel.selectRecording(id: item.id)
-                                    viewModel.renameRecording(id: item.id)
-                                }
-
-                                Button("Delete", role: .destructive) {
-                                    if viewModel.selectedRecordingIDs.contains(item.id),
-                                       viewModel.selectedRecordingIDs.count > 1 {
-                                        pendingDeleteRecordingID = nil
-                                        isShowingDeleteConfirmation = true
-                                    } else {
-                                        viewModel.selectRecording(id: item.id)
-                                        pendingDeleteRecordingID = item.id
-                                        isShowingDeleteConfirmation = true
-                                    }
-                                }
-
-                                Divider()
-
-                                Button("Transcribe") {
-                                    viewModel.selectRecording(id: item.id)
-                                    Task {
-                                        await viewModel.transcribeSelected(
-                                            configuration: batchWhisperConfiguration,
-                                            summaryConfiguration: llamaSummaryConfiguration
-                                        )
-                                    }
-                                }
-                                .disabled(viewModel.isRecording)
-
-                                Button("Summarize") {
-                                    viewModel.selectRecording(id: item.id)
-                                    Task {
-                                        await viewModel.summarizeSelected(
-                                            summaryConfiguration: llamaSummaryConfiguration
-                                        )
-                                    }
-                                }
-                                .disabled(viewModel.isRecording || item.transcriptURL == nil)
-
-                                Button("Reveal Audio") {
-                                    viewModel.selectRecording(id: item.id)
-                                    viewModel.revealAudio()
-                                }
-
-                                Button("Reveal Transcript") {
-                                    viewModel.selectRecording(id: item.id)
-                                    viewModel.revealTranscript()
-                                }
-                                .disabled(item.transcriptURL == nil)
-
-                                Button("Export Audio") {
-                                    viewModel.selectRecording(id: item.id)
-                                    viewModel.exportAudio()
-                                }
-
-                                Button("Export Transcript") {
-                                    viewModel.selectRecording(id: item.id)
-                                    viewModel.exportTranscript()
-                                }
-                                .disabled(item.transcriptURL == nil)
-
-                                Button("Export All") {
-                                    viewModel.selectRecording(id: item.id)
-                                    viewModel.exportAll()
-                                }
-                                .disabled(item.transcriptURL == nil || item.summaryURL == nil)
-                            }
-                        }
-
-                        if isFileDropTargeted {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(.ultraThinMaterial)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6]))
-                                )
-                                .overlay(
-                                    Text("Drop WAV files to import")
-                                        .font(.headline)
-                                        .foregroundStyle(.primary)
-                                )
-                                .padding(8)
-                                .allowsHitTesting(false)
-                        }
+                                    .foregroundStyle(.primary)
+                            )
+                            .padding(8)
+                            .allowsHitTesting(false)
                     }
-                    .frame(minHeight: 260, maxHeight: .infinity)
-                    .onDrop(of: ["public.file-url"], isTargeted: $isFileDropTargeted) { providers in
-                        viewModel.importDroppedAudio(providers: providers)
+
+                    if viewModel.queuedJobCount > 0 {
+                        Text("Queue: \(viewModel.queuedJobCount)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 8)
+                            .padding(.trailing, 12)
+                            .allowsHitTesting(false)
                     }
+                }
+                .frame(minHeight: 260, maxHeight: .infinity)
+                .onDrop(of: ["public.file-url"], isTargeted: $isFileDropTargeted) { providers in
+                    viewModel.importDroppedAudio(providers: providers)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 

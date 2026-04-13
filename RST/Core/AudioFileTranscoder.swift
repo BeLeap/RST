@@ -30,6 +30,10 @@ struct AudioFileTranscoder {
     }
 
     static func convertToWAV(from sourceURL: URL, to destinationWAVURL: URL) throws {
+        guard isImportableAudioExtension(sourceURL.pathExtension) else {
+            throw AudioFileTranscoderError.unsupportedInputFormat(sourceURL.lastPathComponent)
+        }
+
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: 16_000,
@@ -71,42 +75,48 @@ struct AudioFileTranscoder {
                 break
             }
 
-            let ratio = outputFormat.sampleRate / inputFormat.sampleRate
-            let outputCapacity = AVAudioFrameCount((Double(inputBuffer.frameLength) * ratio).rounded(.up)) + 1_024
-            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: outputCapacity) else {
-                throw AudioFileTranscoderError.failedToCreateAudioBuffer
-            }
-
             var didConsumeInput = false
-            var conversionError: NSError?
-            let status = converter.convert(to: outputBuffer, error: &conversionError) { _, outStatus in
-                if didConsumeInput {
-                    outStatus.pointee = .noDataNow
-                    return nil
+            while true {
+                let ratio = outputFormat.sampleRate / inputFormat.sampleRate
+                let outputCapacity = AVAudioFrameCount((Double(inputBuffer.frameLength) * ratio).rounded(.up)) + 1_024
+                guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: outputCapacity) else {
+                    throw AudioFileTranscoderError.failedToCreateAudioBuffer
                 }
 
-                didConsumeInput = true
-                outStatus.pointee = .haveData
-                return inputBuffer
-            }
+                var conversionError: NSError?
+                let status = converter.convert(to: outputBuffer, error: &conversionError) { _, outStatus in
+                    if didConsumeInput {
+                        outStatus.pointee = .noDataNow
+                        return nil
+                    }
 
-            if let conversionError {
-                throw conversionError
-            }
+                    didConsumeInput = true
+                    outStatus.pointee = .haveData
+                    return inputBuffer
+                }
 
-            switch status {
-            case .haveData, .inputRanDry:
+                if let conversionError {
+                    throw conversionError
+                }
+
                 if outputBuffer.frameLength > 0 {
                     try outputFile.write(from: outputBuffer)
                 }
-            case .endOfStream, .noDataNow:
+
+                switch status {
+                case .haveData:
+                    continue
+                case .inputRanDry, .endOfStream, .noDataNow:
+                    break
+                @unknown default:
+                    throw NSError(
+                        domain: "AudioFileTranscoder",
+                        code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: "Unknown conversion status."]
+                    )
+                }
+
                 break
-            @unknown default:
-                throw NSError(
-                    domain: "AudioFileTranscoder",
-                    code: 2,
-                    userInfo: [NSLocalizedDescriptionKey: "Unknown conversion status."]
-                )
             }
 
             inputBuffer.frameLength = 0

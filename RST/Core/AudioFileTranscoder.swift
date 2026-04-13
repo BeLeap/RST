@@ -106,8 +106,14 @@ struct AudioFileTranscoder {
                 switch status {
                 case .haveData:
                     continue
-                case .inputRanDry, .endOfStream, .noDataNow:
+                case .inputRanDry, .endOfStream:
                     break
+                case .error:
+                    throw NSError(
+                        domain: "AudioFileTranscoder",
+                        code: 3,
+                        userInfo: [NSLocalizedDescriptionKey: "Audio conversion failed with converter error status."]
+                    )
                 @unknown default:
                     throw NSError(
                         domain: "AudioFileTranscoder",

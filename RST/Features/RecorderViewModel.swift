@@ -4,6 +4,23 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class RecorderViewModel: ObservableObject {
+    private enum ExportError: LocalizedError {
+        case sourceFileMissing(String)
+        case copyFailed(fileName: String, reason: String)
+        case rollbackFailed(failedFileName: String, copyReason: String, rollbackReason: String)
+
+        var errorDescription: String? {
+            switch self {
+            case .sourceFileMissing(let fileName):
+                return "Export failed because \(fileName) could not be found."
+            case .copyFailed(let fileName, let reason):
+                return "Export failed while copying \(fileName): \(reason)"
+            case .rollbackFailed(let failedFileName, let copyReason, let rollbackReason):
+                return "Export failed while copying \(failedFileName): \(copyReason). Cleanup after partial export also failed: \(rollbackReason)"
+            }
+        }
+    }
+
     private static let liveUpdateInterval: TimeInterval = 2.5
 
     @Published private(set) var recordings: [RecordingItem] = []
@@ -830,8 +847,29 @@ final class RecorderViewModel: ObservableObject {
 
     private func exportItems(_ sourceURLs: [URL], to destinationDirectory: URL) throws {
         for sourceURL in sourceURLs {
+            guard FileManager.default.fileExists(atPath: sourceURL.path) else {
+                throw ExportError.sourceFileMissing(sourceURL.lastPathComponent)
+            }
+        }
+
+        var copiedDestinations: [URL] = []
+        for sourceURL in sourceURLs {
             let destinationURL = destinationDirectory.appendingPathComponent(sourceURL.lastPathComponent, isDirectory: false)
-            try copyItemReplacingDestination(at: sourceURL, to: destinationURL)
+            do {
+                try copyItemReplacingDestination(at: sourceURL, to: destinationURL)
+                copiedDestinations.append(destinationURL)
+            } catch let copyError {
+                do {
+                    try rollbackCopiedItems(copiedDestinations)
+                } catch let rollbackError {
+                    throw ExportError.rollbackFailed(
+                        failedFileName: sourceURL.lastPathComponent,
+                        copyReason: copyError.localizedDescription,
+                        rollbackReason: rollbackError.localizedDescription
+                    )
+                }
+                throw ExportError.copyFailed(fileName: sourceURL.lastPathComponent, reason: copyError.localizedDescription)
+            }
         }
     }
 
@@ -840,6 +878,14 @@ final class RecorderViewModel: ObservableObject {
             try FileManager.default.removeItem(at: destinationURL)
         }
         try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+    }
+
+    private func rollbackCopiedItems(_ destinationURLs: [URL]) throws {
+        for destinationURL in destinationURLs {
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+        }
     }
 
     private func firstRecordingID(in ids: Set<RecordingItem.ID>) -> RecordingItem.ID? {

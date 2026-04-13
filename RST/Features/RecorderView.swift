@@ -227,7 +227,7 @@ struct RecorderView: View {
                         .foregroundStyle(llamaModelStore.lastErrorMessage == nil ? Color.secondary : Color.red)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("The app records WAV files locally, transcribes them with embedded Whisper, and can summarize final transcripts through embedded llama.cpp.")
+                    Text("The app stores WAV recordings locally, exports compressed M4A audio, transcribes with embedded Whisper, and can summarize final transcripts through embedded llama.cpp.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -363,7 +363,7 @@ struct RecorderView: View {
                                     .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6]))
                             )
                             .overlay(
-                                Text("Drop WAV files to import")
+                                Text("Drop WAV/M4A/MP3/AAC/MP4 audio to import as WAV")
                                     .font(.headline)
                                     .foregroundStyle(.primary)
                             )

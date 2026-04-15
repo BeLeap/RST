@@ -341,14 +341,20 @@ final class RecorderViewModel: ObservableObject {
         }
 
         do {
-            let compressedAudioURL = destinationDirectory
-                .appendingPathComponent(recording.audioURL.deletingPathExtension().lastPathComponent)
-                .appendingPathExtension(AudioFileTranscoder.compressedExportExtension)
-            try AudioFileTranscoder.exportCompressedAudio(from: recording.audioURL, to: compressedAudioURL)
+            try ensureExportSourcesExist([
+                transcriptURL,
+                summaryURL
+            ])
+
             try exportItems([
                 transcriptURL,
                 summaryURL
             ], to: destinationDirectory)
+
+            let compressedAudioURL = destinationDirectory
+                .appendingPathComponent(recording.audioURL.deletingPathExtension().lastPathComponent)
+                .appendingPathExtension(AudioFileTranscoder.compressedExportExtension)
+            try AudioFileTranscoder.exportCompressedAudio(from: recording.audioURL, to: compressedAudioURL)
             statusMessage = "Exported all artifacts for \(recording.audioURL.lastPathComponent)"
         } catch {
             statusMessage = "Export failed: \(error.localizedDescription)"
@@ -835,7 +841,15 @@ final class RecorderViewModel: ObservableObject {
     private func exportItems(_ sourceURLs: [URL], to destinationDirectory: URL) throws {
         for sourceURL in sourceURLs {
             let destinationURL = destinationDirectory.appendingPathComponent(sourceURL.lastPathComponent, isDirectory: false)
-            try copyItemReplacingDestination(at: sourceURL, to: destinationURL)
+            do {
+                try copyItemReplacingDestination(at: sourceURL, to: destinationURL)
+            } catch {
+                throw NSError(
+                    domain: "RecorderViewModel.Export",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to export \(sourceURL.lastPathComponent): \(error.localizedDescription)"]
+                )
+            }
         }
     }
 
@@ -849,10 +863,37 @@ final class RecorderViewModel: ObservableObject {
     }
 
     private func copyItemReplacingDestination(at sourceURL: URL, to destinationURL: URL) throws {
+        guard FileManager.default.fileExists(atPath: sourceURL.path) else {
+            throw NSError(
+                domain: "RecorderViewModel.Export",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Source file not found: \(sourceURL.lastPathComponent)"]
+            )
+        }
+
+        let normalizedSource = sourceURL.standardizedFileURL
+        let normalizedDestination = destinationURL.standardizedFileURL
+
+        if normalizedSource == normalizedDestination {
+            return
+        }
+
         if FileManager.default.fileExists(atPath: destinationURL.path) {
             try FileManager.default.removeItem(at: destinationURL)
         }
         try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+    }
+
+    private func ensureExportSourcesExist(_ sourceURLs: [URL]) throws {
+        let missingFiles = sourceURLs.filter { !FileManager.default.fileExists(atPath: $0.path) }
+        guard missingFiles.isEmpty else {
+            let names = missingFiles.map(\.lastPathComponent).joined(separator: ", ")
+            throw NSError(
+                domain: "RecorderViewModel.Export",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Export failed because source files are missing: \(names)"]
+            )
+        }
     }
 
     private func firstRecordingID(in ids: Set<RecordingItem.ID>) -> RecordingItem.ID? {

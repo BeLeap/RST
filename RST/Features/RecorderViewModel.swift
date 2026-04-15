@@ -282,15 +282,25 @@ final class RecorderViewModel: ObservableObject {
             return
         }
 
+        let compressedFileName = recording.audioURL
+            .deletingPathExtension()
+            .lastPathComponent
+            .appending(".\(AudioFileTranscoder.compressedExportExtension)")
+
         guard let destination = PanelPicker.saveFile(
             title: "Export Recording",
-            suggestedName: recording.audioURL.lastPathComponent,
-            allowedFileTypes: [recording.audioURL.pathExtension]
+            suggestedName: compressedFileName,
+            allowedFileTypes: [AudioFileTranscoder.compressedExportExtension]
         ) else {
             return
         }
 
-        exportItem(at: recording.audioURL, to: destination)
+        do {
+            try AudioFileTranscoder.exportCompressedAudio(from: recording.audioURL, to: destination)
+            statusMessage = "Exported compressed audio \(destination.lastPathComponent)"
+        } catch {
+            statusMessage = "Audio export failed: \(error.localizedDescription)"
+        }
     }
 
     func exportTranscript() {
@@ -331,8 +341,11 @@ final class RecorderViewModel: ObservableObject {
         }
 
         do {
+            let compressedAudioURL = destinationDirectory
+                .appendingPathComponent(recording.audioURL.deletingPathExtension().lastPathComponent)
+                .appendingPathExtension(AudioFileTranscoder.compressedExportExtension)
+            try AudioFileTranscoder.exportCompressedAudio(from: recording.audioURL, to: compressedAudioURL)
             try exportItems([
-                recording.audioURL,
                 transcriptURL,
                 summaryURL
             ], to: destinationDirectory)
@@ -472,7 +485,7 @@ final class RecorderViewModel: ObservableObject {
 
         let acceptedProviders = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
         guard !acceptedProviders.isEmpty else {
-            statusMessage = "Drop one or more local .wav files."
+            statusMessage = "Drop one or more local WAV, M4A, AAC, MP3, or MP4 files."
             return false
         }
 
@@ -526,7 +539,7 @@ final class RecorderViewModel: ObservableObject {
         }
 
         if errors.isEmpty {
-            statusMessage = "Imported \(importedURLs.count) WAV file(s)."
+            statusMessage = "Imported \(importedURLs.count) audio file(s) as WAV."
         } else if importedURLs.isEmpty {
             statusMessage = "Import failed: \(errors.joined(separator: " | "))"
         } else {
@@ -819,19 +832,19 @@ final class RecorderViewModel: ObservableObject {
         isTranscribing = false
     }
 
+    private func exportItems(_ sourceURLs: [URL], to destinationDirectory: URL) throws {
+        for sourceURL in sourceURLs {
+            let destinationURL = destinationDirectory.appendingPathComponent(sourceURL.lastPathComponent, isDirectory: false)
+            try copyItemReplacingDestination(at: sourceURL, to: destinationURL)
+        }
+    }
+
     private func exportItem(at sourceURL: URL, to destinationURL: URL) {
         do {
             try copyItemReplacingDestination(at: sourceURL, to: destinationURL)
             statusMessage = "Exported \(sourceURL.lastPathComponent)"
         } catch {
             statusMessage = error.localizedDescription
-        }
-    }
-
-    private func exportItems(_ sourceURLs: [URL], to destinationDirectory: URL) throws {
-        for sourceURL in sourceURLs {
-            let destinationURL = destinationDirectory.appendingPathComponent(sourceURL.lastPathComponent, isDirectory: false)
-            try copyItemReplacingDestination(at: sourceURL, to: destinationURL)
         }
     }
 

@@ -220,11 +220,11 @@ struct TranscriptStore {
 
         let standardizedSourceURL = sourceURL.standardizedFileURL
         let sourceExtension = standardizedSourceURL.pathExtension.lowercased()
-        guard sourceExtension == "wav" else {
+        guard AudioFileTranscoder.isImportableAudioExtension(sourceExtension) else {
             throw NSError(
                 domain: "TranscriptStore",
                 code: 6,
-                userInfo: [NSLocalizedDescriptionKey: "Only .wav files can be imported."]
+                userInfo: [NSLocalizedDescriptionKey: "Only WAV, M4A, AAC, MP3, and MP4 audio files can be imported."]
             )
         }
 
@@ -237,19 +237,26 @@ struct TranscriptStore {
         }
 
         let standardizedRecordingsDirectory = recordingsDirectory.standardizedFileURL
-        if standardizedSourceURL.deletingLastPathComponent() == standardizedRecordingsDirectory {
+        if sourceExtension == "wav",
+           standardizedSourceURL.deletingLastPathComponent() == standardizedRecordingsDirectory {
             return standardizedSourceURL
         }
 
         let destinationURL = uniqueImportDestination(for: standardizedSourceURL)
-        try fileManager.copyItem(at: standardizedSourceURL, to: destinationURL)
+        if sourceExtension == "wav" {
+            try fileManager.copyItem(at: standardizedSourceURL, to: destinationURL)
+        } else {
+            try AudioFileTranscoder.convertToWAV(from: standardizedSourceURL, to: destinationURL)
+        }
         return destinationURL
     }
 
     private func uniqueImportDestination(for sourceURL: URL) -> URL {
         let baseName = sourceURL.deletingPathExtension().lastPathComponent
-        let ext = sourceURL.pathExtension
-        var candidateURL = recordingsDirectory.appendingPathComponent(sourceURL.lastPathComponent)
+        let ext = "wav"
+        var candidateURL = recordingsDirectory
+            .appendingPathComponent(baseName)
+            .appendingPathExtension(ext)
         var suffix = 2
 
         while fileManager.fileExists(atPath: candidateURL.path) {

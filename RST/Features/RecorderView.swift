@@ -354,6 +354,7 @@ struct RecorderView: View {
                             .disabled(item.transcriptURL == nil || item.summaryURL == nil)
                         }
                     }
+                    .scrollDisabled(true)
 
                     if isFileDropTargeted {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -376,11 +377,11 @@ struct RecorderView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.top, 8)
-                            .padding(.trailing, 12)
+                        .padding(.trailing, 12)
                             .allowsHitTesting(false)
                     }
                 }
-                .frame(minHeight: 260, maxHeight: .infinity)
+                .frame(minHeight: 260)
                 .onDrop(of: ["public.file-url"], isTargeted: $isFileDropTargeted) { providers in
                     viewModel.importDroppedAudio(providers: providers)
                 }

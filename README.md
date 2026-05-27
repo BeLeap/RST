@@ -52,7 +52,7 @@ You can also use `just build-whisper`, `just build-llama`, `just build-app`, or 
 6. If macOS blocks the app after moving it, clear quarantine attributes and relaunch:
 
 ```bash
-xattr -cr /Application/RST.app
+xattr -cr /Applications/RST.app
 ```
 
 7. In the sidebar, set:

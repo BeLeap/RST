@@ -22,9 +22,11 @@ struct AudioFileTranscoder {
     static func exportCompressedAudio(from sourceWAVURL: URL, to destinationM4AURL: URL) throws {
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: 16_000,
+            // 44.1 kHz AAC improves playback compatibility across third-party players.
+            AVSampleRateKey: 44_100,
             AVNumberOfChannelsKey: 1,
             AVEncoderBitRateKey: 64_000,
+            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
         ]
         try transcodeAudio(from: sourceWAVURL, to: destinationM4AURL, outputSettings: settings)
     }
@@ -69,63 +71,72 @@ struct AudioFileTranscoder {
             throw AudioFileTranscoderError.failedToCreateAudioBuffer
         }
 
+        let ratio = outputFormat.sampleRate / inputFormat.sampleRate
+        let outputCapacity = AVAudioFrameCount((Double(inputBufferCapacity) * ratio).rounded(.up)) + 1_024
+
+        var reachedEndOfInput = false
+        var inputReadError: Error?
+
         while true {
-            try inputFile.read(into: inputBuffer)
-            if inputBuffer.frameLength == 0 {
-                break
+            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: outputCapacity) else {
+                throw AudioFileTranscoderError.failedToCreateAudioBuffer
             }
 
-            var didConsumeInput = false
-            while true {
-                let ratio = outputFormat.sampleRate / inputFormat.sampleRate
-                let outputCapacity = AVAudioFrameCount((Double(inputBuffer.frameLength) * ratio).rounded(.up)) + 1_024
-                guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: outputCapacity) else {
-                    throw AudioFileTranscoderError.failedToCreateAudioBuffer
+            var conversionError: NSError?
+            let status = converter.convert(to: outputBuffer, error: &conversionError) { _, outStatus in
+                if reachedEndOfInput {
+                    outStatus.pointee = .endOfStream
+                    return nil
                 }
 
-                var conversionError: NSError?
-                let status = converter.convert(to: outputBuffer, error: &conversionError) { _, outStatus in
-                    if didConsumeInput {
-                        outStatus.pointee = .noDataNow
-                        return nil
-                    }
-
-                    didConsumeInput = true
-                    outStatus.pointee = .haveData
-                    return inputBuffer
+                do {
+                    try inputFile.read(into: inputBuffer)
+                } catch {
+                    inputReadError = error
+                    outStatus.pointee = .endOfStream
+                    return nil
                 }
 
-                if let conversionError {
-                    throw conversionError
+                if inputBuffer.frameLength == 0 {
+                    reachedEndOfInput = true
+                    outStatus.pointee = .endOfStream
+                    return nil
                 }
 
-                if outputBuffer.frameLength > 0 {
-                    try outputFile.write(from: outputBuffer)
-                }
-
-                switch status {
-                case .haveData:
-                    continue
-                case .inputRanDry, .endOfStream:
-                    break
-                case .error:
-                    throw NSError(
-                        domain: "AudioFileTranscoder",
-                        code: 3,
-                        userInfo: [NSLocalizedDescriptionKey: "Audio conversion failed with converter error status."]
-                    )
-                @unknown default:
-                    throw NSError(
-                        domain: "AudioFileTranscoder",
-                        code: 2,
-                        userInfo: [NSLocalizedDescriptionKey: "Unknown conversion status."]
-                    )
-                }
-
-                break
+                outStatus.pointee = .haveData
+                return inputBuffer
             }
 
-            inputBuffer.frameLength = 0
+            if let conversionError {
+                throw conversionError
+            }
+
+            if let inputReadError {
+                throw inputReadError
+            }
+
+            if outputBuffer.frameLength > 0 {
+                try outputFile.write(from: outputBuffer)
+            }
+
+            switch status {
+            case .haveData, .inputRanDry:
+                continue
+            case .endOfStream:
+                return
+            case .error:
+                throw NSError(
+                    domain: "AudioFileTranscoder",
+                    code: 3,
+                    userInfo: [NSLocalizedDescriptionKey: "Audio conversion failed with converter error status."]
+                )
+            @unknown default:
+                throw NSError(
+                    domain: "AudioFileTranscoder",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "Unknown conversion status."]
+                )
+            }
         }
     }
 }
